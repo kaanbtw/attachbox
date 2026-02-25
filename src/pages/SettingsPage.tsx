@@ -10,6 +10,7 @@ import {
   Check,
   ArrowLeft,
   X,
+  Power,
 } from "lucide-react";
 import {
   getSettings,
@@ -20,6 +21,7 @@ import {
 } from "@/lib/tauri-api";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import type { AppSettings } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -60,10 +62,12 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
   const [pendingStoragePath, setPendingStoragePath] = useState<string | null>(
     null,
   );
+  const [launchOnStartup, setLaunchOnStartup] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const initialSettingsRef = useRef<{
     settings: AppSettings;
     storagePath: string;
+    autostart: boolean;
   } | null>(null);
 
   useEffect(() => {
@@ -71,7 +75,13 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
       const [s, path] = await Promise.all([getSettings(), getStoragePath()]);
       setSettings(s);
       setStoragePath(path);
-      initialSettingsRef.current = { settings: { ...s }, storagePath: path };
+      const autostartEnabled = await isEnabled().catch(() => false);
+      setLaunchOnStartup(autostartEnabled);
+      initialSettingsRef.current = {
+        settings: { ...s },
+        storagePath: path,
+        autostart: autostartEnabled,
+      };
     };
     loadSettings();
   }, []);
@@ -82,9 +92,10 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
     return (
       settings.shortcut_key !== init.settings.shortcut_key ||
       settings.auto_paste_enabled !== init.settings.auto_paste_enabled ||
+      launchOnStartup !== init.autostart ||
       (pendingStoragePath !== null && pendingStoragePath !== init.storagePath)
     );
-  }, [settings, pendingStoragePath]);
+  }, [settings, pendingStoragePath, launchOnStartup]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -122,6 +133,26 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
 
       await updateSettings(settingsToSave);
       await updateShortcut(settingsToSave.shortcut_key);
+
+      // Apply autostart change
+      if (
+        initialSettingsRef.current &&
+        launchOnStartup !== initialSettingsRef.current.autostart
+      ) {
+        if (launchOnStartup) {
+          await enable();
+        } else {
+          await disable();
+        }
+      }
+
+      // Update initial ref so hasChanges resets
+      initialSettingsRef.current = {
+        settings: { ...settingsToSave },
+        storagePath: pendingStoragePath || storagePath,
+        autostart: launchOnStartup,
+      };
+
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 2000);
     } catch (err) {
@@ -129,7 +160,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
     } finally {
       setIsChangingFolder(false);
     }
-  }, [settings, pendingStoragePath, storagePath]);
+  }, [settings, pendingStoragePath, storagePath, launchOnStartup]);
 
   const handleChangeFolder = useCallback(async () => {
     try {
@@ -344,6 +375,27 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
           >
             <motion.div
               animate={{ x: settings.auto_paste_enabled ? 22 : 3 }}
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              className="absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm"
+            />
+          </button>
+        </SettingSection>
+
+        {/* Launch on Startup */}
+        <SettingSection
+          icon={<Power className="w-4 h-4" />}
+          title="Launch on Startup"
+          description="Start AttachBox when you log in"
+        >
+          <button
+            onClick={() => setLaunchOnStartup(!launchOnStartup)}
+            className={cn(
+              "relative w-11 h-6 rounded-full transition-colors duration-300 cursor-pointer",
+              launchOnStartup ? "bg-accent" : "bg-surface-4",
+            )}
+          >
+            <motion.div
+              animate={{ x: launchOnStartup ? 22 : 3 }}
               transition={{ type: "spring", stiffness: 500, damping: 30 }}
               className="absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm"
             />
