@@ -56,21 +56,39 @@ export function GalleryPage({
     overscan: 3,
   });
 
+  // Resolve asset URLs for visible items
   useEffect(() => {
+    let cancelled = false;
+
     const resolveUrls = async () => {
-      const newUrls: Record<string, string> = {};
-      for (const item of filteredItems) {
-        if (!assetUrls[item.id]) {
+      // Resolve all item URLs in parallel
+      const results = await Promise.allSettled(
+        filteredItems.map(async (item) => {
           const absPath = await getMediaAssetPath(item.filename);
-          newUrls[item.id] = getAssetUrl(absPath);
+          return { id: item.id, url: getAssetUrl(absPath) };
+        }),
+      );
+
+      if (cancelled) return;
+
+      const newUrls: Record<string, string> = {};
+      for (const result of results) {
+        if (result.status === "fulfilled") {
+          newUrls[result.value.id] = result.value.url;
         }
       }
+
       if (Object.keys(newUrls).length > 0) {
         setAssetUrls((prev) => ({ ...prev, ...newUrls }));
       }
     };
+
     resolveUrls();
-  }, [filteredItems, assetUrls]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filteredItems]);
 
   const handleSelect = useCallback(
     async (item: MediaItem) => {
