@@ -151,7 +151,6 @@ fn start_file_watcher(app_handle: tauri::AppHandle, watched_path: WatchedPath) {
         };
 
         let _ = watcher.watch(&current_dir, RecursiveMode::NonRecursive);
-        println!("File watcher started on {:?}", current_dir);
 
         let mut last_emit = std::time::Instant::now();
         let debounce_dur = Duration::from_millis(500);
@@ -164,9 +163,7 @@ fn start_file_watcher(app_handle: tauri::AppHandle, watched_path: WatchedPath) {
                     let _ = watcher.unwatch(&current_dir);
                     if let Err(e) = watcher.watch(&new_dir, RecursiveMode::NonRecursive) {
                         eprintln!("Failed to watch new directory {:?}: {}", new_dir, e);
-                    } else {
-                        println!("File watcher switched to {:?}", new_dir);
-                    }
+                    } else {}
                     current_dir = new_dir;
                 }
             }
@@ -189,7 +186,6 @@ fn start_file_watcher(app_handle: tauri::AppHandle, watched_path: WatchedPath) {
                 Ok(Err(_)) => {}
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
-                    println!("File watcher channel disconnected, stopping.");
                     break;
                 }
             }

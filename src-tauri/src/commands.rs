@@ -65,6 +65,11 @@ pub fn import_files(
 
 #[tauri::command]
 pub async fn download_from_url(url: String) -> Result<String, AppError> {
+    // Only allow http and https schemes
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err(AppError::Generic("Only http:// and https:// URLs are allowed".into()));
+    }
+
     let response = reqwest::get(&url)
         .await
         .map_err(|e| AppError::Generic(format!("Download failed: {}", e)))?;
