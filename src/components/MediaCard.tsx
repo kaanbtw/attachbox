@@ -16,7 +16,6 @@ import type { OpenMode } from "@/App";
 interface MediaCardProps {
   item: MediaItem;
   assetUrl: string;
-  isSelected: boolean;
   openMode: OpenMode;
   onSelect: () => void;
   onDelete: () => void;
@@ -27,7 +26,6 @@ type LoadState = "loading" | "loaded" | "error";
 export function MediaCard({
   item,
   assetUrl,
-  isSelected,
   openMode,
   onSelect,
   onDelete,
@@ -108,10 +106,7 @@ export function MediaCard({
       onMouseLeave={handleMouseLeave}
       className={cn(
         "relative group aspect-square rounded-xl overflow-hidden cursor-pointer",
-        "border transition-all duration-200",
-        isSelected
-          ? "border-accent media-selected"
-          : "border-transparent hover:border-border-hover",
+        "border border-transparent transition-all duration-200 hover:border-border-hover",
       )}
     >
       {/* Loading / Error / Media content */}

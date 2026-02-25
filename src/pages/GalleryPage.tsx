@@ -33,11 +33,9 @@ export function GalleryPage({
   onOpenSettings,
 }: GalleryPageProps) {
   const autoPaste = openMode === "hotkey";
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [assetUrls, setAssetUrls] = useState<Record<string, string>>({});
   const parentRef = useRef<HTMLDivElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
 
   const filteredItems = useMemo(() => {
     if (!searchQuery.trim()) return items;
@@ -113,73 +111,6 @@ export function GalleryPage({
     [onRefresh],
   );
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (document.activeElement === searchRef.current) {
-        if (e.key === "Escape") {
-          searchRef.current?.blur();
-          setSearchQuery("");
-        }
-        return;
-      }
-
-      if (e.key === "/") {
-        e.preventDefault();
-        searchRef.current?.focus();
-        return;
-      }
-
-      const total = filteredItems.length;
-      if (total === 0) return;
-
-      switch (e.key) {
-        case "ArrowRight":
-          e.preventDefault();
-          setSelectedIndex((prev) => Math.min(prev + 1, total - 1));
-          break;
-        case "ArrowLeft":
-          e.preventDefault();
-          setSelectedIndex((prev) => Math.max(prev - 1, 0));
-          break;
-        case "ArrowDown":
-          e.preventDefault();
-          setSelectedIndex((prev) => Math.min(prev + COLUMN_COUNT, total - 1));
-          break;
-        case "ArrowUp":
-          e.preventDefault();
-          setSelectedIndex((prev) => Math.max(prev - COLUMN_COUNT, 0));
-          break;
-        case "Enter":
-          e.preventDefault();
-          if (filteredItems[selectedIndex]) {
-            handleSelect(filteredItems[selectedIndex]);
-          }
-          break;
-        case "Delete":
-        case "Backspace":
-          e.preventDefault();
-          if (filteredItems[selectedIndex]) {
-            handleDelete(filteredItems[selectedIndex].id);
-          }
-          break;
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [filteredItems, selectedIndex, handleSelect, handleDelete]);
-
-  useEffect(() => {
-    const rowIndex = Math.floor(selectedIndex / COLUMN_COUNT);
-    virtualizer.scrollToIndex(rowIndex, { align: "auto" });
-  }, [selectedIndex, virtualizer]);
-
-  useEffect(() => {
-    setSelectedIndex((prev) =>
-      Math.min(prev, Math.max(0, filteredItems.length - 1)),
-    );
-  }, [filteredItems.length]);
-
   return (
     <div className="flex flex-col h-full">
       {/* Search & Action Bar */}
@@ -190,15 +121,12 @@ export function GalleryPage({
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-faint" />
           <input
-            ref={searchRef}
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             disabled={items.length === 0}
             placeholder={
-              items.length === 0
-                ? "No media to search"
-                : 'Search media...  type "/"'
+              items.length === 0 ? "No media to search" : "Search media..."
             }
             className="w-full pl-9 pr-4 py-2 text-xs rounded-lg bg-surface-2 border border-border text-fg placeholder:text-fg-faint focus:outline-none focus:border-accent/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           />
@@ -272,12 +200,8 @@ export function GalleryPage({
                               key={item.id}
                               item={item}
                               assetUrl={assetUrls[item.id] || ""}
-                              isSelected={selectedIndex === itemIndex}
                               openMode={openMode}
-                              onSelect={() => {
-                                setSelectedIndex(itemIndex);
-                                handleSelect(item);
-                              }}
+                              onSelect={() => handleSelect(item)}
                               onDelete={() => handleDelete(item.id)}
                             />
                           );

@@ -6,7 +6,6 @@ import {
   ClipboardPaste,
   Save,
   CheckCircle2,
-  Info,
   ChevronDown,
   Check,
   ArrowLeft,
@@ -334,29 +333,6 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
             />
           </button>
         </SettingSection>
-
-        {/* Info */}
-        <div className="flex items-start gap-3 p-4 rounded-xl bg-surface-1 border border-border">
-          <Info className="w-4 h-4 text-accent shrink-0 mt-0.5" />
-          <div className="text-[11px] text-fg-muted leading-relaxed space-y-2">
-            <p className="font-medium text-fg-secondary">Keyboard shortcuts</p>
-            <div className="space-y-1">
-              {[
-                ["←→↑↓", "Navigate gallery"],
-                ["Enter", "Select & paste"],
-                ["/", "Focus search"],
-                ["Delete", "Remove selected"],
-              ].map(([key, desc]) => (
-                <div key={key} className="flex items-center gap-2">
-                  <kbd className="px-1.5 py-0.5 rounded bg-surface-3 text-fg-faint font-mono text-[10px] min-w-8 text-center">
-                    {key}
-                  </kbd>
-                  <span>{desc}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Save */}
