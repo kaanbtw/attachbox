@@ -5,6 +5,10 @@ description = "A quick media board for your desktop"
 authors = []
 edition = "2021"
 
+[[bin]]
+name = "AttachBox"
+path = "src/main.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
