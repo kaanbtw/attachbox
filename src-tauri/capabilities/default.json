@@ -21,6 +21,7 @@
     "global-shortcut:allow-unregister",
     "store:default",
     "dialog:default",
-    "dialog:allow-open"
+    "dialog:allow-open",
+    "shell:default"
   ]
 }

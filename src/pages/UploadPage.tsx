@@ -8,8 +8,9 @@ import {
   X,
   Link as LinkIcon,
   Download,
+  Loader2,
 } from "lucide-react";
-import { importFiles, importFromUrl } from "@/lib/tauri-api";
+import { importFiles, downloadFromUrl } from "@/lib/tauri-api";
 import { cn } from "@/lib/utils";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
@@ -35,30 +36,27 @@ export function UploadModal({
   const [isUploading, setIsUploading] = useState(false);
   const [results, setResults] = useState<UploadResult[]>([]);
   const [urlInput, setUrlInput] = useState("");
+  const [isUrlUploading, setIsUrlUploading] = useState(false);
 
   const handleUrlSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!urlInput.trim()) return;
 
     setIsUploading(true);
-    setResults([]);
+    setIsUrlUploading(true);
+    setResults([{ type: "success", message: "Downloading file..." }]);
 
     try {
-      await importFromUrl(urlInput.trim());
-      setResults([
-        { type: "success", message: "Successfully imported from URL" },
-      ]);
+      const tempPath = await downloadFromUrl(urlInput.trim());
       setUrlInput("");
-      onRefresh();
 
-      setTimeout(() => {
-        onClose();
-        setResults([]);
-      }, 1200);
+      // Pass the downloaded file to processFiles,
+      // which will handle FFmpeg conversion and importing
+      await processFiles([tempPath]);
     } catch (err) {
-      setResults([{ type: "error", message: `URL import failed: ${err}` }]);
-    } finally {
+      setResults([{ type: "error", message: `URL download failed: ${err}` }]);
       setIsUploading(false);
+      setIsUrlUploading(false);
     }
   };
 
@@ -66,7 +64,7 @@ export function UploadModal({
     async (filePaths: string[]) => {
       if (filePaths.length === 0) return;
       setIsUploading(true);
-      setResults([]);
+      setResults([{ type: "success", message: "Processing media files..." }]);
 
       try {
         const imported = await importFiles(filePaths);
@@ -101,6 +99,7 @@ export function UploadModal({
         setResults([{ type: "error", message: `Import failed: ${err}` }]);
       } finally {
         setIsUploading(false);
+        setIsUrlUploading(false);
       }
     },
     [onRefresh, onClose],
@@ -205,7 +204,7 @@ export function UploadModal({
                     isDragOver ? "bg-accent/20" : "bg-surface-3",
                   )}
                 >
-                  {isUploading ? (
+                  {isUploading && !isUrlUploading ? (
                     <motion.div
                       animate={{ rotate: 360 }}
                       transition={{
@@ -278,7 +277,20 @@ export function UploadModal({
                   className="w-10 h-10 rounded-xl bg-surface-2 text-fg border border-border hover:bg-accent/15 hover:border-accent/40 hover:text-accent transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 flex items-center justify-center"
                   aria-label="Upload from URL"
                 >
-                  <Download className="w-4 h-4" />
+                  {isUrlUploading ? (
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{
+                        repeat: Infinity,
+                        duration: 1,
+                        ease: "linear",
+                      }}
+                    >
+                      <Loader2 className="w-4 h-4" />
+                    </motion.div>
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
                 </button>
               </div>
             </form>

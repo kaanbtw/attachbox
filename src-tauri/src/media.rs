@@ -1,7 +1,28 @@
 use crate::errors::AppError;
-use crate::models::{classify_media, is_allowed_extension, is_blocked_extension, MediaItem, MAX_FILE_SIZE};
+use crate::models::{classify_media, is_allowed_extension, is_blocked_extension, MediaItem, MediaType, MAX_FILE_SIZE};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+pub fn has_audio_stream(path: &Path) -> bool {
+    let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    if extension != "mp4" {
+        return true; // Assume videos like .webm have audio for safety unless we parse them too
+    }
+    
+    if let Ok(file) = fs::File::open(path) {
+        if let Ok(mp4) = mp4::read_mp4(file) {
+            for track in mp4.tracks().values() {
+                if let Ok(track_type) = track.track_type() {
+                    if track_type == mp4::TrackType::Audio {
+                        return true;
+                    }
+                }
+            }
+            return false; // No audio track found
+        }
+    }
+    true // Default to true if parsing fails
+}
 
 pub struct MediaManager {
     storage_dir: PathBuf,
@@ -47,10 +68,14 @@ impl MediaManager {
                 continue;
             }
 
-            let media_type = match classify_media(&extension) {
+            let mut media_type = match classify_media(&extension) {
                 Some(mt) => mt,
                 None => continue,
             };
+
+            if media_type == MediaType::Video && !has_audio_stream(&path) {
+                media_type = MediaType::Gif;
+            }
 
             // Check file size
             let metadata = match fs::metadata(&path) {
@@ -114,9 +139,13 @@ impl MediaManager {
             )));
         }
 
-        let media_type = classify_media(&extension).ok_or_else(|| {
+        let mut media_type = classify_media(&extension).ok_or_else(|| {
             AppError::InvalidFileType(format!("Cannot classify file type: .{}", extension))
         })?;
+
+        if media_type == MediaType::Video && !has_audio_stream(source_path) {
+            media_type = MediaType::Gif;
+        }
 
         // Check source file size
         let source_meta = fs::metadata(source_path)?;

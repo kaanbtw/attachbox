@@ -10,8 +10,8 @@ export async function importFiles(paths: string[]): Promise<MediaItem[]> {
   return invoke<MediaItem[]>("import_files", { paths });
 }
 
-export async function importFromUrl(url: string): Promise<MediaItem> {
-  return invoke<MediaItem>("import_from_url", { url });
+export async function downloadFromUrl(url: string): Promise<string> {
+  return invoke<string>("download_from_url", { url });
 }
 
 export async function deleteMedia(id: string): Promise<void> {
@@ -55,4 +55,8 @@ export async function scanMedia(): Promise<MediaItem[]> {
 
 export async function changeStoragePath(newPath: string): Promise<string> {
   return invoke<string>("change_storage_path", { newPath });
+}
+
+export async function isSilentVideo(path: string): Promise<boolean> {
+  return invoke<boolean>("is_silent_video", { path });
 }

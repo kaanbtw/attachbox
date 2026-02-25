@@ -200,6 +200,7 @@ fn start_file_watcher(app_handle: tauri::AppHandle, watched_path: WatchedPath) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_shell::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -304,7 +305,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_all_media,
             import_files,
-            import_from_url,
+            download_from_url,
             delete_media,
             select_and_paste,
             get_settings,
@@ -314,6 +315,7 @@ pub fn run() {
             update_shortcut,
             scan_media,
             change_storage_path,
+            is_silent_video,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

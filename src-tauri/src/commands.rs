@@ -1,7 +1,9 @@
 use crate::clipboard;
 use crate::errors::AppError;
-use crate::media::MediaManager;
+use crate::media::{has_audio_stream, MediaManager};
 use crate::models::{AppSettings, MediaItem};
+use ffmpeg_sidecar::command::FfmpegCommand;
+use ffmpeg_sidecar::download::auto_download;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State};
@@ -61,11 +63,7 @@ pub fn import_files(
 }
 
 #[tauri::command]
-pub async fn import_from_url(
-    url: String,
-    media_mgr: State<'_, ManagedMedia>,
-    items: State<'_, ManagedItems>,
-) -> Result<MediaItem, AppError> {
+pub async fn download_from_url(url: String) -> Result<String, AppError> {
     let response = reqwest::get(&url)
         .await
         .map_err(|e| AppError::Generic(format!("Download failed: {}", e)))?;
@@ -95,7 +93,7 @@ pub async fn import_from_url(
 
     let temp_dir = std::env::temp_dir();
     let temp_file_name = format!("download-{}.{}", uuid::Uuid::new_v4(), ext);
-    let temp_path = temp_dir.join(&temp_file_name);
+    let mut temp_path = temp_dir.join(&temp_file_name);
 
     let bytes = response
         .bytes()
@@ -103,22 +101,43 @@ pub async fn import_from_url(
         .map_err(|e| AppError::Generic(format!("Read failed: {}", e)))?;
     std::fs::write(&temp_path, bytes).map_err(|e| AppError::Generic(format!("Write failed: {}", e)))?;
 
-    let item = {
-        let mgr = media_mgr.lock().unwrap();
-        mgr.import_file(&temp_path)?
-    };
-
-    let _ = std::fs::remove_file(temp_path);
-
-    let scanned = {
-        let mgr = media_mgr.lock().unwrap();
-        mgr.scan_folder()?
-    };
+    let final_ext = ext;
     
-    let mut store = items.lock().unwrap();
-    *store = scanned;
+    // Check if it's a video. If it's a silent MP4, convert it to a robust generic GIF
+    if final_ext == "mp4" || final_ext == "webm" {
+        if !has_audio_stream(&temp_path) {
+            let gif_file_name = format!("download-{}.gif", uuid::Uuid::new_v4());
+            let gif_path = temp_dir.join(&gif_file_name);
+            
+            // Auto install ffmpeg binaries to the user's OS without any prompts
+            if auto_download().is_ok() {
+               let command = FfmpegCommand::new()
+                   .input(&temp_path.to_string_lossy().to_string())
+                   .args(&[
+                       "-vf",
+                       "fps=8,scale=250:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=64:stats_mode=single[p];[s1][p]paletteuse=dither=floyd_steinberg:diff_mode=rectangle",
+                       "-c:v",
+                       "gif",
+                       "-loop", 
+                       "0"
+                   ])
+                   .output(&gif_path.to_string_lossy().to_string())
+                   .spawn()
+                   .map_err(|e| AppError::Generic(format!("GIF execution spawned incorrectly: {}", e)));
+                   
+               if let Ok(mut c) = command {
+                   let _ = c.wait(); // Wait for compression engine to finish
+                   if gif_path.exists() {
+                       // Replace the standard MP4 download with the beautiful GIF
+                       let _ = std::fs::remove_file(&temp_path);
+                       temp_path = gif_path;
+                   }
+               }
+            }
+        }
+    }
 
-    Ok(item)
+    Ok(temp_path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -260,4 +279,9 @@ pub fn change_storage_path(
     let _ = app.emit("storage-changed", &final_path);
 
     Ok(final_path)
+}
+
+#[tauri::command]
+pub fn is_silent_video(path: String) -> bool {
+    !crate::media::has_audio_stream(std::path::Path::new(&path))
 }
