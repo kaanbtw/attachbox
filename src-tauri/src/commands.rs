@@ -61,6 +61,67 @@ pub fn import_files(
 }
 
 #[tauri::command]
+pub async fn import_from_url(
+    url: String,
+    media_mgr: State<'_, ManagedMedia>,
+    items: State<'_, ManagedItems>,
+) -> Result<MediaItem, AppError> {
+    let response = reqwest::get(&url)
+        .await
+        .map_err(|e| AppError::Generic(format!("Download failed: {}", e)))?;
+
+    // Guess extension
+    let url_without_query = url.split('?').next().unwrap_or("");
+    let url_path = std::path::Path::new(url_without_query);
+    let mut ext = url_path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_string();
+
+    if ext.is_empty() {
+        if let Some(ct) = response.headers().get(reqwest::header::CONTENT_TYPE) {
+            let ct_str = ct.to_str().unwrap_or("");
+            ext = match ct_str {
+                "image/jpeg" => "jpg".to_string(),
+                "image/png" => "png".to_string(),
+                "image/gif" => "gif".to_string(),
+                "image/webp" => "webp".to_string(),
+                "video/mp4" => "mp4".to_string(),
+                _ => "bin".to_string(),
+            };
+        }
+    }
+
+    let temp_dir = std::env::temp_dir();
+    let temp_file_name = format!("download-{}.{}", uuid::Uuid::new_v4(), ext);
+    let temp_path = temp_dir.join(&temp_file_name);
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| AppError::Generic(format!("Read failed: {}", e)))?;
+    std::fs::write(&temp_path, bytes).map_err(|e| AppError::Generic(format!("Write failed: {}", e)))?;
+
+    let item = {
+        let mgr = media_mgr.lock().unwrap();
+        mgr.import_file(&temp_path)?
+    };
+
+    let _ = std::fs::remove_file(temp_path);
+
+    let scanned = {
+        let mgr = media_mgr.lock().unwrap();
+        mgr.scan_folder()?
+    };
+    
+    let mut store = items.lock().unwrap();
+    *store = scanned;
+
+    Ok(item)
+}
+
+#[tauri::command]
 pub fn delete_media(
     id: String,
     media_mgr: State<'_, ManagedMedia>,

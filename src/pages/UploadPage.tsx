@@ -6,8 +6,10 @@ import {
   AlertTriangle,
   FileImage,
   X,
+  Link as LinkIcon,
+  Download,
 } from "lucide-react";
-import { importFiles } from "@/lib/tauri-api";
+import { importFiles, importFromUrl } from "@/lib/tauri-api";
 import { cn } from "@/lib/utils";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
@@ -15,6 +17,7 @@ interface UploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onRefresh: () => void;
+  onForceOpen: () => void;
 }
 
 interface UploadResult {
@@ -22,10 +25,42 @@ interface UploadResult {
   message: string;
 }
 
-export function UploadModal({ isOpen, onClose, onRefresh }: UploadModalProps) {
+export function UploadModal({
+  isOpen,
+  onClose,
+  onRefresh,
+  onForceOpen,
+}: UploadModalProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [results, setResults] = useState<UploadResult[]>([]);
+  const [urlInput, setUrlInput] = useState("");
+
+  const handleUrlSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!urlInput.trim()) return;
+
+    setIsUploading(true);
+    setResults([]);
+
+    try {
+      await importFromUrl(urlInput.trim());
+      setResults([
+        { type: "success", message: "Successfully imported from URL" },
+      ]);
+      setUrlInput("");
+      onRefresh();
+
+      setTimeout(() => {
+        onClose();
+        setResults([]);
+      }, 1200);
+    } catch (err) {
+      setResults([{ type: "error", message: `URL import failed: ${err}` }]);
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const processFiles = useCallback(
     async (filePaths: string[]) => {
@@ -73,17 +108,17 @@ export function UploadModal({ isOpen, onClose, onRefresh }: UploadModalProps) {
 
   // Listen for Tauri's native drag-drop events
   useEffect(() => {
-    if (!isOpen) return;
-
     const appWindow = getCurrentWebviewWindow();
     const setupListener = async () => {
       const unlisten = await appWindow.onDragDropEvent((event) => {
         if (event.payload.type === "over") {
           setIsDragOver(true);
+          onForceOpen();
         } else if (event.payload.type === "leave") {
           setIsDragOver(false);
         } else if (event.payload.type === "drop") {
           setIsDragOver(false);
+          onForceOpen();
           processFiles(event.payload.paths);
         }
       });
@@ -94,7 +129,7 @@ export function UploadModal({ isOpen, onClose, onRefresh }: UploadModalProps) {
     return () => {
       unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [isOpen, processFiles]);
+  }, [processFiles, onForceOpen]);
 
   // Escape to close
   useEffect(() => {
@@ -209,6 +244,44 @@ export function UploadModal({ isOpen, onClose, onRefresh }: UploadModalProps) {
                 </div>
               </div>
             </div>
+
+            {/* URL Input Divider */}
+            <div className="relative flex items-center justify-center py-1 shrink-0 px-4">
+              <div className="absolute inset-x-4 flex items-center">
+                <div className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-surface-0/95 px-3 text-fg-faint font-medium">
+                  Or paste link
+                </span>
+              </div>
+            </div>
+
+            {/* URL Input Section */}
+            <form onSubmit={handleUrlSubmit} className="p-4 pt-3 shrink-0">
+              <div className="relative flex items-center gap-2">
+                <div className="relative flex-1">
+                  <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-faint" />
+                  <input
+                    type="url"
+                    value={urlInput}
+                    onChange={(e) => setUrlInput(e.target.value)}
+                    placeholder="https://example.com/image.png"
+                    className="w-full pl-9 pr-4 py-2.5 text-xs rounded-xl bg-surface-2 border border-border text-fg placeholder:text-fg-faint focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/30 transition-all font-mono disabled:opacity-50"
+                    disabled={isUploading}
+                    autoComplete="off"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={!urlInput.trim() || isUploading}
+                  className="w-10 h-10 rounded-xl bg-surface-2 text-fg border border-border hover:bg-accent/15 hover:border-accent/40 hover:text-accent transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0 flex items-center justify-center"
+                  aria-label="Upload from URL"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+              </div>
+            </form>
 
             {/* Results */}
             <AnimatePresence>

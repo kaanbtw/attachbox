@@ -93,6 +93,7 @@ export default function App() {
         isOpen={showUpload}
         onClose={() => setShowUpload(false)}
         onRefresh={fetchMedia}
+        onForceOpen={() => setShowUpload(true)}
       />
     </div>
   );

@@ -304,6 +304,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_all_media,
             import_files,
+            import_from_url,
             delete_media,
             select_and_paste,
             get_settings,

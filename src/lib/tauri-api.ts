@@ -10,6 +10,10 @@ export async function importFiles(paths: string[]): Promise<MediaItem[]> {
   return invoke<MediaItem[]>("import_files", { paths });
 }
 
+export async function importFromUrl(url: string): Promise<MediaItem> {
+  return invoke<MediaItem>("import_from_url", { url });
+}
+
 export async function deleteMedia(id: string): Promise<void> {
   return invoke("delete_media", { id });
 }
