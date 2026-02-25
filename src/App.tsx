@@ -40,7 +40,6 @@ export default function App() {
     const unlisten = listen<string>("window-opened", (event) => {
       const source = event.payload as OpenMode;
       setOpenMode(source);
-      // Always go to gallery when opened via hotkey
       if (source === "hotkey") {
         setCurrentPage("gallery");
       }
@@ -50,6 +49,22 @@ export default function App() {
       unlisten.then((fn) => fn());
     };
   }, []);
+
+  // Listen for file system changes (file watcher) and storage path changes
+  useEffect(() => {
+    const unlistenMedia = listen("media-changed", () => {
+      fetchMedia();
+    });
+
+    const unlistenStorage = listen("storage-changed", () => {
+      fetchMedia();
+    });
+
+    return () => {
+      unlistenMedia.then((fn) => fn());
+      unlistenStorage.then((fn) => fn());
+    };
+  }, [fetchMedia]);
 
   const renderPage = () => {
     switch (currentPage) {

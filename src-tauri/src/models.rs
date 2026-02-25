@@ -41,7 +41,11 @@ const ALLOWED_EXTENSIONS: &[&str] = &[
 
 const BLOCKED_EXTENSIONS: &[&str] = &[
     "exe", "sh", "bat", "cmd", "ps1", "msi", "com", "scr", "pif", "vbs", "js",
+    "dll", "sys", "lnk", "url",
 ];
+
+/// Maximum file size: 100 MB
+pub const MAX_FILE_SIZE: u64 = 100 * 1024 * 1024;
 
 pub fn classify_media(extension: &str) -> Option<MediaType> {
     match extension.to_lowercase().as_str() {

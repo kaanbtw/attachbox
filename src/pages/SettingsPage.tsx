@@ -15,7 +15,9 @@ import {
   updateSettings,
   getStoragePath,
   updateShortcut,
+  changeStoragePath,
 } from "@/lib/tauri-api";
+import { open } from "@tauri-apps/plugin-dialog";
 import type { AppSettings } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -52,6 +54,10 @@ export function SettingsPage() {
   const [storagePath, setStoragePath] = useState("");
   const [isSaved, setIsSaved] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isChangingFolder, setIsChangingFolder] = useState(false);
+  const [pendingStoragePath, setPendingStoragePath] = useState<string | null>(
+    null,
+  );
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -83,14 +89,40 @@ export function SettingsPage() {
   const handleSave = useCallback(async () => {
     if (!settings) return;
     try {
+      setIsChangingFolder(!!pendingStoragePath);
+
+      // If storage path changed, migrate files first
+      if (pendingStoragePath && pendingStoragePath !== storagePath) {
+        const newPath = await changeStoragePath(pendingStoragePath);
+        setStoragePath(newPath);
+        setPendingStoragePath(null);
+      }
+
       await updateSettings(settings);
       await updateShortcut(settings.shortcut_key);
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 2000);
     } catch (err) {
       console.error("Failed to save settings:", err);
+    } finally {
+      setIsChangingFolder(false);
     }
-  }, [settings]);
+  }, [settings, pendingStoragePath, storagePath]);
+
+  const handleChangeFolder = useCallback(async () => {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "Select Storage Folder",
+      });
+      if (!selected) return;
+      // Just store the pending path, actual migration happens on Save
+      setPendingStoragePath(selected as string);
+    } catch (err) {
+      console.error("Failed to open folder picker:", err);
+    }
+  }, []);
 
   if (!settings) {
     return (
@@ -123,7 +155,7 @@ export function SettingsPage() {
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               className={cn(
-                "flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-lg text-xs font-mono font-medium border transition-all duration-200 cursor-pointer min-w-[90px] justify-between",
+                "flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-lg text-xs font-mono font-medium border transition-all duration-200 cursor-pointer min-w-22.5 justify-between",
                 isDropdownOpen
                   ? "bg-surface-2 border-accent/50 text-fg shadow-[0_0_12px_oklch(0.60_0.25_280/0.15)]"
                   : "bg-surface-3 border-border text-fg hover:border-border-hover",
@@ -200,15 +232,54 @@ export function SettingsPage() {
         </SettingSection>
 
         {/* Storage path */}
-        <SettingSection
-          icon={<FolderOpen className="w-4 h-4" />}
-          title="Storage Location"
-          description="Where media files are physically stored"
-        >
-          <code className="block px-3 py-2 rounded-lg bg-surface-2 text-[10px] font-mono text-fg-muted border border-border truncate max-w-48">
-            {storagePath}
+        <div className="p-4 rounded-xl bg-surface-1 border border-border space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-surface-3 flex items-center justify-center text-fg-muted shrink-0">
+                <FolderOpen className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-xs font-semibold text-fg">
+                  Storage Location
+                </h3>
+                <p
+                  className={cn(
+                    "text-[11px] mt-0.5",
+                    pendingStoragePath
+                      ? "text-accent font-medium"
+                      : "text-fg-muted",
+                  )}
+                >
+                  {pendingStoragePath
+                    ? "⚠ Save to apply folder change"
+                    : "Where media files are stored"}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleChangeFolder}
+              disabled={isChangingFolder}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-[11px] font-medium border transition-all duration-200 cursor-pointer shrink-0",
+                isChangingFolder
+                  ? "bg-surface-2 border-border text-fg-faint cursor-wait"
+                  : "bg-surface-3 border-border text-fg-secondary hover:border-border-hover hover:text-fg",
+              )}
+            >
+              {isChangingFolder ? "Moving..." : "Change"}
+            </button>
+          </div>
+          <code
+            className={cn(
+              "block px-3 py-2 rounded-lg text-[10px] font-mono border overflow-x-auto whitespace-nowrap",
+              pendingStoragePath
+                ? "bg-accent/5 text-accent border-accent/25"
+                : "bg-surface-2 text-fg-muted border-border",
+            )}
+          >
+            {pendingStoragePath || storagePath}
           </code>
-        </SettingSection>
+        </div>
 
         {/* Auto paste */}
         <SettingSection

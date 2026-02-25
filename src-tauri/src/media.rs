@@ -1,8 +1,7 @@
 use crate::errors::AppError;
-use crate::models::{classify_media, is_allowed_extension, is_blocked_extension, MediaItem};
+use crate::models::{classify_media, is_allowed_extension, is_blocked_extension, MediaItem, MAX_FILE_SIZE};
 use std::fs;
 use std::path::{Path, PathBuf};
-use uuid::Uuid;
 
 pub struct MediaManager {
     storage_dir: PathBuf,
@@ -18,6 +17,82 @@ impl MediaManager {
         &self.storage_dir
     }
 
+    /// Scan the storage folder and return all valid media items.
+    /// This replaces the manifest-based approach entirely.
+    pub fn scan_folder(&self) -> Result<Vec<MediaItem>, AppError> {
+        let mut items = Vec::new();
+
+        let entries = fs::read_dir(&self.storage_dir)?;
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
+
+            // Skip directories, symlinks, hidden files, and manifest.json
+            if !path.is_file() {
+                continue;
+            }
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                if name.starts_with('.') || name == "manifest.json" {
+                    continue;
+                }
+            }
+
+            // Validate extension
+            let extension = match path.extension().and_then(|e| e.to_str()) {
+                Some(ext) => ext.to_lowercase(),
+                None => continue,
+            };
+
+            if is_blocked_extension(&extension) || !is_allowed_extension(&extension) {
+                continue;
+            }
+
+            let media_type = match classify_media(&extension) {
+                Some(mt) => mt,
+                None => continue,
+            };
+
+            // Check file size
+            let metadata = match fs::metadata(&path) {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+
+            if metadata.len() > MAX_FILE_SIZE {
+                continue;
+            }
+
+            let filename = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("")
+                .to_string();
+
+            let created_at = metadata
+                .created()
+                .unwrap_or(std::time::SystemTime::now())
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+
+            items.push(MediaItem {
+                id: filename.clone(),
+                filename: filename.clone(),
+                original_name: filename,
+                media_type,
+                file_size: metadata.len(),
+                created_at,
+            });
+        }
+
+        // Sort by created_at descending (newest first)
+        items.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+
+        Ok(items)
+    }
+
+    /// Import a file into the storage folder. Preserves original filename.
+    /// If a file with the same name exists, appends a suffix like " (2)".
     pub fn import_file(&self, source_path: &Path) -> Result<MediaItem, AppError> {
         let extension = source_path
             .extension()
@@ -43,15 +118,49 @@ impl MediaManager {
             AppError::InvalidFileType(format!("Cannot classify file type: .{}", extension))
         })?;
 
+        // Check source file size
+        let source_meta = fs::metadata(source_path)?;
+        if source_meta.len() > MAX_FILE_SIZE {
+            return Err(AppError::InvalidFileType(format!(
+                "File too large (max {}MB)",
+                MAX_FILE_SIZE / 1024 / 1024
+            )));
+        }
+
         let original_name = source_path
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("unknown")
             .to_string();
 
-        let unique_id = Uuid::new_v4().to_string();
-        let dest_filename = format!("{}.{}", unique_id, extension);
+        // Determine destination filename with dedup
+        let dest_filename = self.deduplicate_filename(&original_name);
         let dest_path = self.storage_dir.join(&dest_filename);
+
+        // Skip if source is already inside our storage dir
+        if let Ok(canonical_src) = source_path.canonicalize() {
+            if let Ok(canonical_dir) = self.storage_dir.canonicalize() {
+                if canonical_src.starts_with(&canonical_dir) {
+                    // File is already in our storage, just build the item
+                    let metadata = fs::metadata(&canonical_src)?;
+                    let created_at = metadata
+                        .created()
+                        .unwrap_or(std::time::SystemTime::now())
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+
+                    return Ok(MediaItem {
+                        id: dest_filename.clone(),
+                        filename: dest_filename,
+                        original_name,
+                        media_type,
+                        file_size: metadata.len(),
+                        created_at,
+                    });
+                }
+            }
+        }
 
         fs::copy(source_path, &dest_path)?;
 
@@ -64,7 +173,7 @@ impl MediaManager {
             .as_secs();
 
         Ok(MediaItem {
-            id: unique_id,
+            id: dest_filename.clone(),
             filename: dest_filename,
             original_name,
             media_type,
@@ -73,25 +182,7 @@ impl MediaManager {
         })
     }
 
-    pub fn list_media(&self) -> Result<Vec<MediaItem>, AppError> {
-        let manifest_path = self.storage_dir.join("manifest.json");
-        if !manifest_path.exists() {
-            return Ok(Vec::new());
-        }
-        let content = fs::read_to_string(&manifest_path)?;
-        let items: Vec<MediaItem> =
-            serde_json::from_str(&content).map_err(|e| AppError::Serialization(e.to_string()))?;
-        Ok(items)
-    }
-
-    pub fn save_manifest(&self, items: &[MediaItem]) -> Result<(), AppError> {
-        let manifest_path = self.storage_dir.join("manifest.json");
-        let content =
-            serde_json::to_string_pretty(items).map_err(|e| AppError::Serialization(e.to_string()))?;
-        fs::write(&manifest_path, content)?;
-        Ok(())
-    }
-
+    /// Delete a media file from storage.
     pub fn delete_media(&self, filename: &str) -> Result<(), AppError> {
         let file_path = self.storage_dir.join(filename);
         if file_path.exists() {
@@ -102,5 +193,75 @@ impl MediaManager {
 
     pub fn get_absolute_path(&self, filename: &str) -> PathBuf {
         self.storage_dir.join(filename)
+    }
+
+    /// Change the storage directory. Moves all valid files from old to new,
+    /// then deletes the old directory.
+    pub fn change_storage_dir(&mut self, new_dir: PathBuf) -> Result<(), AppError> {
+        if new_dir == self.storage_dir {
+            return Ok(());
+        }
+
+        fs::create_dir_all(&new_dir)?;
+
+        // Move existing media files to new dir
+        if let Ok(entries) = fs::read_dir(&self.storage_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_file() {
+                    continue;
+                }
+                let filename = match path.file_name().and_then(|n| n.to_str()) {
+                    Some(name) => name.to_string(),
+                    None => continue,
+                };
+
+                // Skip manifest (no longer needed)
+                if filename == "manifest.json" {
+                    continue;
+                }
+
+                let dest = new_dir.join(&filename);
+                if !dest.exists() {
+                    let _ = fs::copy(&path, &dest);
+                }
+            }
+        }
+
+        // Try to remove old directory
+        let _ = fs::remove_dir_all(&self.storage_dir);
+
+        self.storage_dir = new_dir;
+        Ok(())
+    }
+
+    /// Generate a unique filename if a file with the same name already exists.
+    fn deduplicate_filename(&self, name: &str) -> String {
+        let path = self.storage_dir.join(name);
+        if !path.exists() {
+            return name.to_string();
+        }
+
+        let stem = Path::new(name)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(name);
+        let ext = Path::new(name)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
+
+        let mut counter = 2u32;
+        loop {
+            let candidate = if ext.is_empty() {
+                format!("{} ({})", stem, counter)
+            } else {
+                format!("{} ({}).{}", stem, counter, ext)
+            };
+            if !self.storage_dir.join(&candidate).exists() {
+                return candidate;
+            }
+            counter += 1;
+        }
     }
 }

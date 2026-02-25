@@ -44,3 +44,11 @@ export function getAssetUrl(absolutePath: string): string {
 export async function updateShortcut(key: string): Promise<void> {
   return invoke("update_shortcut", { key });
 }
+
+export async function scanMedia(): Promise<MediaItem[]> {
+  return invoke<MediaItem[]>("scan_media");
+}
+
+export async function changeStoragePath(newPath: string): Promise<string> {
+  return invoke<string>("change_storage_path", { newPath });
+}

@@ -4,7 +4,7 @@ use crate::media::MediaManager;
 use crate::models::{AppSettings, MediaItem};
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 
 pub type ManagedMedia = Mutex<MediaManager>;
 pub type ManagedSettings = Mutex<AppSettings>;
@@ -15,6 +15,19 @@ pub fn get_all_media(items: State<'_, ManagedItems>) -> Vec<MediaItem> {
     items.lock().unwrap().clone()
 }
 
+/// Scan the storage folder and refresh the in-memory items list.
+#[tauri::command]
+pub fn scan_media(
+    media_mgr: State<'_, ManagedMedia>,
+    items: State<'_, ManagedItems>,
+) -> Result<Vec<MediaItem>, AppError> {
+    let mgr = media_mgr.lock().unwrap();
+    let scanned = mgr.scan_folder()?;
+    let mut store = items.lock().unwrap();
+    *store = scanned.clone();
+    Ok(scanned)
+}
+
 #[tauri::command]
 pub fn import_files(
     paths: Vec<String>,
@@ -22,7 +35,6 @@ pub fn import_files(
     items: State<'_, ManagedItems>,
 ) -> Result<Vec<MediaItem>, AppError> {
     let mgr = media_mgr.lock().unwrap();
-    let mut store = items.lock().unwrap();
     let mut imported = Vec::new();
 
     for path_str in &paths {
@@ -32,7 +44,6 @@ pub fn import_files(
         }
         match mgr.import_file(&path) {
             Ok(item) => {
-                store.push(item.clone());
                 imported.push(item);
             }
             Err(e) => {
@@ -41,7 +52,11 @@ pub fn import_files(
         }
     }
 
-    mgr.save_manifest(&store)?;
+    // Re-scan folder to get the up-to-date list
+    let scanned = mgr.scan_folder()?;
+    let mut store = items.lock().unwrap();
+    *store = scanned;
+
     Ok(imported)
 }
 
@@ -57,7 +72,6 @@ pub fn delete_media(
     if let Some(pos) = store.iter().position(|item| item.id == id) {
         let item = store.remove(pos);
         mgr.delete_media(&item.filename)?;
-        mgr.save_manifest(&store)?;
     }
 
     Ok(())
@@ -83,16 +97,13 @@ pub fn select_and_paste(
 
     clipboard::copy_file_to_clipboard(&abs_path)?;
 
-    // Hide the window, restore focus, then simulate paste
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.hide();
     }
 
     if auto_paste {
-        // Small delay to let the OS process the window hide and focus switch
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(150));
-            // Focus will naturally return to the previous window when AttachBox hides
             if let Err(e) = clipboard::simulate_paste() {
                 eprintln!("Auto-paste failed: {}", e);
             }
@@ -141,7 +152,6 @@ pub fn update_shortcut(key: String, app: tauri::AppHandle) -> Result<(), AppErro
     let code = crate::key_name_to_code(&key)
         .ok_or_else(|| AppError::Generic(format!("Unsupported key: {}", key)))?;
 
-    // Unregister all existing shortcuts, then register the new one
     let gs = app.global_shortcut();
     let _ = gs.unregister_all();
 
@@ -150,4 +160,43 @@ pub fn update_shortcut(key: String, app: tauri::AppHandle) -> Result<(), AppErro
         .map_err(|e| AppError::Generic(format!("Failed to register shortcut: {}", e)))?;
 
     Ok(())
+}
+
+/// Change the storage directory. Moves files from old to new, deletes old.
+/// Returns the new storage path.
+#[tauri::command]
+pub fn change_storage_path(
+    new_path: String,
+    media_mgr: State<'_, ManagedMedia>,
+    items: State<'_, ManagedItems>,
+    settings: State<'_, ManagedSettings>,
+    watched_path: State<'_, crate::WatchedPath>,
+    app: tauri::AppHandle,
+) -> Result<String, AppError> {
+    let new_dir = PathBuf::from(&new_path);
+
+    let mut mgr = media_mgr.lock().unwrap();
+    mgr.change_storage_dir(new_dir.clone())?;
+
+    // Re-scan to get updated items
+    let scanned = mgr.scan_folder()?;
+    let mut store = items.lock().unwrap();
+    *store = scanned;
+
+    // Update settings
+    let final_path = mgr.storage_path().to_string_lossy().to_string();
+    {
+        let mut s = settings.lock().unwrap();
+        s.storage_path = final_path.clone();
+    }
+
+    // Update the file watcher's watched directory
+    {
+        let mut wp = watched_path.lock().unwrap();
+        *wp = new_dir;
+    }
+
+    let _ = app.emit("storage-changed", &final_path);
+
+    Ok(final_path)
 }

@@ -8,6 +8,7 @@ use commands::*;
 use media::MediaManager;
 use models::AppSettings;
 use std::sync::Mutex;
+use std::path::PathBuf;
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
@@ -64,7 +65,6 @@ fn toggle_window(app: &tauri::AppHandle, source: &str) {
             position_window_at_cursor(&window);
             let _ = window.show();
             let _ = window.set_focus();
-            // Tell the frontend how the window was opened
             let _ = window.emit("window-opened", source);
         }
     }
@@ -83,7 +83,6 @@ fn position_window_at_cursor(window: &tauri::WebviewWindow) {
         unsafe {
             let mut cursor = POINT { x: 0, y: 0 };
             if GetCursorPos(&mut cursor).is_ok() {
-                // Get the monitor the cursor is on
                 let hmonitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
                 let mut monitor_info = MONITORINFO {
                     cbSize: std::mem::size_of::<MONITORINFO>() as u32,
@@ -92,32 +91,22 @@ fn position_window_at_cursor(window: &tauri::WebviewWindow) {
 
                 let (mon_left, mon_top, mon_right, mon_bottom) =
                     if GetMonitorInfoW(hmonitor, &mut monitor_info).as_bool() {
-                        let rc = monitor_info.rcWork; // usable area (excludes taskbar)
+                        let rc = monitor_info.rcWork;
                         (rc.left, rc.top, rc.right, rc.bottom)
                     } else {
-                        (0, 0, 1920, 1080) // fallback
+                        (0, 0, 1920, 1080)
                     };
 
                 let win_w = 480i32;
                 let win_h = 560i32;
 
-                // X: center on cursor, Y: bottom edge slightly above cursor
                 let mut x = cursor.x - win_w / 2;
-                let mut y = cursor.y - win_h + 20; // bottom edge 20px above cursor
+                let mut y = cursor.y - win_h + 20;
 
-                // Clamp so the window stays within the monitor work area
-                if x + win_w > mon_right {
-                    x = mon_right - win_w;
-                }
-                if y + win_h > mon_bottom {
-                    y = mon_bottom - win_h;
-                }
-                if x < mon_left {
-                    x = mon_left;
-                }
-                if y < mon_top {
-                    y = mon_top;
-                }
+                if x + win_w > mon_right { x = mon_right - win_w; }
+                if y + win_h > mon_bottom { y = mon_bottom - win_h; }
+                if x < mon_left { x = mon_left; }
+                if y < mon_top { y = mon_top; }
 
                 let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
             }
@@ -130,6 +119,83 @@ fn position_window_at_cursor(window: &tauri::WebviewWindow) {
     }
 }
 
+/// Shared state for the watched directory path, so commands can update it.
+pub type WatchedPath = std::sync::Arc<Mutex<PathBuf>>;
+
+/// Start a file system watcher that reads the watch path from shared state.
+/// When the path changes (via change_storage_path), the watcher automatically
+/// switches to the new directory.
+fn start_file_watcher(app_handle: tauri::AppHandle, watched_path: WatchedPath) {
+    use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    std::thread::spawn(move || {
+        let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
+
+        let mut watcher: RecommendedWatcher = match Watcher::new(
+            tx,
+            notify::Config::default().with_poll_interval(Duration::from_secs(2)),
+        ) {
+            Ok(w) => w,
+            Err(e) => {
+                eprintln!("Failed to create file watcher: {}", e);
+                return;
+            }
+        };
+
+        let mut current_dir = {
+            let p = watched_path.lock().unwrap();
+            p.clone()
+        };
+
+        let _ = watcher.watch(&current_dir, RecursiveMode::NonRecursive);
+        println!("File watcher started on {:?}", current_dir);
+
+        let mut last_emit = std::time::Instant::now();
+        let debounce_dur = Duration::from_millis(500);
+
+        loop {
+            // Check if the watched path has changed
+            {
+                let new_dir = watched_path.lock().unwrap().clone();
+                if new_dir != current_dir {
+                    let _ = watcher.unwatch(&current_dir);
+                    if let Err(e) = watcher.watch(&new_dir, RecursiveMode::NonRecursive) {
+                        eprintln!("Failed to watch new directory {:?}: {}", new_dir, e);
+                    } else {
+                        println!("File watcher switched to {:?}", new_dir);
+                    }
+                    current_dir = new_dir;
+                }
+            }
+
+            match rx.recv_timeout(Duration::from_millis(300)) {
+                Ok(Ok(event)) => {
+                    match event.kind {
+                        EventKind::Create(_)
+                        | EventKind::Remove(_)
+                        | EventKind::Modify(notify::event::ModifyKind::Name(_)) => {
+                            let now = std::time::Instant::now();
+                            if now.duration_since(last_emit) > debounce_dur {
+                                last_emit = now;
+                                let _ = app_handle.emit("media-changed", ());
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(Err(_)) => {}
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    println!("File watcher channel disconnected, stopping.");
+                    break;
+                }
+            }
+        }
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -137,7 +203,6 @@ pub fn run() {
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
-                    // Only one shortcut registered at a time, so any press is ours
                     if event.state == ShortcutState::Pressed {
                         toggle_window(app, "hotkey");
                     }
@@ -145,6 +210,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Determine storage directory
             let app_data = app
@@ -155,10 +221,10 @@ pub fn run() {
 
             // Initialize MediaManager
             let media_mgr =
-                MediaManager::new(media_dir).expect("Failed to initialize media storage");
+                MediaManager::new(media_dir.clone()).expect("Failed to initialize media storage");
 
-            // Load existing media items from manifest
-            let existing_items = media_mgr.list_media().unwrap_or_default();
+            // Scan folder for existing media (no more manifest)
+            let existing_items = media_mgr.scan_folder().unwrap_or_default();
 
             // Load or initialize settings
             let settings = AppSettings {
@@ -182,6 +248,11 @@ pub fn run() {
             app.global_shortcut()
                 .register(shortcut)
                 .expect("Failed to register global shortcut");
+
+            // --- Start File Watcher ---
+            let watched_path: WatchedPath = std::sync::Arc::new(Mutex::new(media_dir));
+            app.manage(watched_path.clone());
+            start_file_watcher(app.handle().clone(), watched_path);
 
             // --- System Tray ---
             let show_item = MenuItem::with_id(app, "show", "Show AttachBox", true, None::<&str>)?;
@@ -240,6 +311,8 @@ pub fn run() {
             get_storage_path,
             get_media_asset_path,
             update_shortcut,
+            scan_media,
+            change_storage_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
