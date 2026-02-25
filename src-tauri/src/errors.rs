@@ -10,8 +10,7 @@ pub enum AppError {
     NotFound(String),
     #[error("Clipboard error: {0}")]
     Clipboard(String),
-    #[error("Serialization error: {0}")]
-    Serialization(String),
+
     #[error("{0}")]
     Generic(String),
 }

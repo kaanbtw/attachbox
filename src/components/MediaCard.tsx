@@ -74,7 +74,7 @@ export function MediaCard({
       onMouseLeave={handleMouseLeave}
       className={cn(
         "relative group aspect-square rounded-xl overflow-hidden cursor-pointer",
-        "border-2 transition-all duration-200",
+        "border transition-all duration-200",
         isSelected
           ? "border-accent media-selected"
           : "border-transparent hover:border-border-hover",

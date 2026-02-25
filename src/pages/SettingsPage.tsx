@@ -9,6 +9,8 @@ import {
   Info,
   ChevronDown,
   Check,
+  ArrowLeft,
+  X,
 } from "lucide-react";
 import {
   getSettings,
@@ -18,6 +20,7 @@ import {
   changeStoragePath,
 } from "@/lib/tauri-api";
 import { open } from "@tauri-apps/plugin-dialog";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { AppSettings } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -49,7 +52,7 @@ const KEY_GROUPS = [
   },
 ];
 
-export function SettingsPage() {
+export function SettingsPage({ onBack }: { onBack: () => void }) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [storagePath, setStoragePath] = useState("");
   const [isSaved, setIsSaved] = useState(false);
@@ -143,6 +146,26 @@ export function SettingsPage() {
       exit={{ opacity: 0, y: -10 }}
       className="flex flex-col h-full"
     >
+      <div
+        data-tauri-drag-region
+        className="flex items-center justify-between h-12 px-4 shrink-0 border-b border-border/50 pt-2"
+      >
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 px-2 py-1 -ml-2 rounded-lg text-[11px] font-medium text-fg-muted hover:text-fg hover:bg-surface-2 transition-all duration-150 cursor-pointer"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Back
+        </button>
+        <button
+          onClick={() => getCurrentWindow().hide()}
+          className="group w-8 h-8 -mr-2 rounded-lg flex items-center justify-center text-fg-faint hover:bg-danger/15 hover:text-danger transition-all duration-200 cursor-pointer"
+          aria-label="Close to tray"
+        >
+          <X className="w-4 h-4 transition-transform duration-150 group-hover:scale-110" />
+        </button>
+      </div>
+
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {/* Shortcut */}
         <SettingSection

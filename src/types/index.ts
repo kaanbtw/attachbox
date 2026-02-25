@@ -15,7 +15,7 @@ export interface AppSettings {
   auto_paste_enabled: boolean;
 }
 
-export type PageRoute = "gallery" | "upload" | "settings";
+export type PageRoute = "gallery" | "settings";
 
 export interface GalleryState {
   selectedIndex: number;

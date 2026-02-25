@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { TitleBar } from "@/components/TitleBar";
 import { GalleryPage } from "@/pages/GalleryPage";
-import { UploadPage } from "@/pages/UploadPage";
+import { UploadModal } from "@/pages/UploadPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { getAllMedia } from "@/lib/tauri-api";
-import type { MediaItem, PageRoute } from "@/types";
+import type { MediaItem } from "@/types";
 import { listen } from "@tauri-apps/api/event";
 
 export type OpenMode = "hotkey" | "tray";
+type View = "gallery" | "settings";
 
 const PAGE_VARIANTS = {
   initial: { opacity: 0, x: 20, filter: "blur(4px)" },
@@ -17,9 +17,10 @@ const PAGE_VARIANTS = {
 };
 
 export default function App() {
-  const [currentPage, setCurrentPage] = useState<PageRoute>("gallery");
+  const [currentView, setCurrentView] = useState<View>("gallery");
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [openMode, setOpenMode] = useState<OpenMode>("tray");
+  const [showUpload, setShowUpload] = useState(false);
 
   const fetchMedia = useCallback(async () => {
     try {
@@ -30,67 +31,41 @@ export default function App() {
     }
   }, []);
 
-  // Initial data load
   useEffect(() => {
     fetchMedia();
   }, [fetchMedia]);
 
-  // Listen for window open mode from Rust
   useEffect(() => {
     const unlisten = listen<string>("window-opened", (event) => {
       const source = event.payload as OpenMode;
       setOpenMode(source);
       if (source === "hotkey") {
-        setCurrentPage("gallery");
+        setCurrentView("gallery");
+        setShowUpload(false);
       }
     });
-
     return () => {
       unlisten.then((fn) => fn());
     };
   }, []);
 
-  // Listen for file system changes (file watcher) and storage path changes
   useEffect(() => {
-    const unlistenMedia = listen("media-changed", () => {
-      fetchMedia();
-    });
-
-    const unlistenStorage = listen("storage-changed", () => {
-      fetchMedia();
-    });
-
+    const unlistenMedia = listen("media-changed", () => fetchMedia());
+    const unlistenStorage = listen("storage-changed", () => fetchMedia());
     return () => {
       unlistenMedia.then((fn) => fn());
       unlistenStorage.then((fn) => fn());
     };
   }, [fetchMedia]);
 
-  const renderPage = () => {
-    switch (currentPage) {
-      case "gallery":
-        return (
-          <GalleryPage
-            items={mediaItems}
-            openMode={openMode}
-            onRefresh={fetchMedia}
-          />
-        );
-      case "upload":
-        return <UploadPage onRefresh={fetchMedia} />;
-      case "settings":
-        return <SettingsPage />;
-    }
-  };
+  const isSettings = currentView === "settings";
 
   return (
     <div className="flex flex-col h-screen bg-surface-0 overflow-hidden rounded-xl border border-border">
-      <TitleBar currentPage={currentPage} onNavigate={setCurrentPage} />
-
       <main className="flex-1 overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.div
-            key={currentPage}
+            key={currentView}
             variants={PAGE_VARIANTS}
             initial="initial"
             animate="animate"
@@ -98,10 +73,27 @@ export default function App() {
             transition={{ duration: 0.2, ease: "easeOut" }}
             className="h-full"
           >
-            {renderPage()}
+            {isSettings ? (
+              <SettingsPage onBack={() => setCurrentView("gallery")} />
+            ) : (
+              <GalleryPage
+                items={mediaItems}
+                openMode={openMode}
+                onRefresh={fetchMedia}
+                onOpenUpload={() => setShowUpload(true)}
+                onOpenSettings={() => setCurrentView("settings")}
+              />
+            )}
           </motion.div>
         </AnimatePresence>
       </main>
+
+      {/* Upload modal overlay */}
+      <UploadModal
+        isOpen={showUpload}
+        onClose={() => setShowUpload(false)}
+        onRefresh={fetchMedia}
+      />
     </div>
   );
 }
