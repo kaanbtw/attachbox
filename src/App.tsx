@@ -10,12 +10,6 @@ import { listen } from "@tauri-apps/api/event";
 export type OpenMode = "hotkey" | "tray";
 type View = "gallery" | "settings";
 
-const PAGE_VARIANTS = {
-  initial: { opacity: 0, x: 20, filter: "blur(4px)" },
-  animate: { opacity: 1, x: 0, filter: "blur(0px)" },
-  exit: { opacity: 0, x: -20, filter: "blur(4px)" },
-};
-
 export default function App() {
   const [currentView, setCurrentView] = useState<View>("gallery");
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
@@ -61,16 +55,15 @@ export default function App() {
   const isSettings = currentView === "settings";
 
   return (
-    <div className="flex flex-col h-screen bg-surface-0 overflow-hidden rounded-xl border border-border">
+    <div className="flex flex-col h-screen bg-surface-0 overflow-hidden rounded-2xl">
       <main className="flex-1 overflow-hidden">
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={currentView}
-            variants={PAGE_VARIANTS}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            transition={{ duration: 0.2, ease: "easeOut" }}
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.97 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
             className="h-full"
           >
             {isSettings ? (

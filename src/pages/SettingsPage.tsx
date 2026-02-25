@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Keyboard,
@@ -61,15 +61,30 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
     null,
   );
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const initialSettingsRef = useRef<{
+    settings: AppSettings;
+    storagePath: string;
+  } | null>(null);
 
   useEffect(() => {
     const loadSettings = async () => {
       const [s, path] = await Promise.all([getSettings(), getStoragePath()]);
       setSettings(s);
       setStoragePath(path);
+      initialSettingsRef.current = { settings: { ...s }, storagePath: path };
     };
     loadSettings();
   }, []);
+
+  const hasChanges = useMemo(() => {
+    if (!settings || !initialSettingsRef.current) return false;
+    const init = initialSettingsRef.current;
+    return (
+      settings.shortcut_key !== init.settings.shortcut_key ||
+      settings.auto_paste_enabled !== init.settings.auto_paste_enabled ||
+      (pendingStoragePath !== null && pendingStoragePath !== init.storagePath)
+    );
+  }, [settings, pendingStoragePath]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -124,12 +139,13 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
         title: "Select Storage Folder",
       });
       if (!selected) return;
-      // Just store the pending path, actual migration happens on Save
+      // Only set pending if it's actually different from current path
+      if (selected === storagePath) return;
       setPendingStoragePath(selected as string);
     } catch (err) {
       console.error("Failed to open folder picker:", err);
     }
-  }, []);
+  }, [storagePath]);
 
   if (!settings) {
     return (
@@ -339,11 +355,14 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
       <div className="px-4 py-3 border-t border-border shrink-0">
         <button
           onClick={handleSave}
+          disabled={!hasChanges && !isSaved}
           className={cn(
-            "w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-300 cursor-pointer",
+            "w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-300",
             isSaved
               ? "bg-success/15 text-success border border-success/25"
-              : "bg-accent hover:bg-accent-hover text-white",
+              : hasChanges
+                ? "bg-accent hover:bg-accent-hover text-white cursor-pointer"
+                : "bg-surface-3 text-fg-faint border border-border cursor-not-allowed",
           )}
         >
           {isSaved ? (

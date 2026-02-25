@@ -76,12 +76,20 @@ export function MediaCard({
     setTimeout(() => setJustCopied(false), 1200);
   }, [onSelect, loadState]);
 
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
   const handleDeleteClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      onDelete();
+      if (confirmDelete) {
+        onDelete();
+        setConfirmDelete(false);
+      } else {
+        setConfirmDelete(true);
+        setTimeout(() => setConfirmDelete(false), 2000);
+      }
     },
-    [onDelete],
+    [onDelete, confirmDelete],
   );
 
   const typeIcon =
@@ -234,12 +242,26 @@ export function MediaCard({
       {/* Delete button */}
       <motion.button
         initial={false}
-        animate={{ opacity: isHovered ? 1 : 0, scale: isHovered ? 1 : 0.8 }}
+        animate={{
+          opacity: confirmDelete || isHovered ? 1 : 0,
+          scale: confirmDelete || isHovered ? 1 : 0.8,
+        }}
         onClick={handleDeleteClick}
-        className="absolute top-2 right-2 p-1.5 rounded-lg bg-danger/80 hover:bg-danger text-white backdrop-blur-sm transition-colors cursor-pointer z-10"
-        aria-label={`Delete ${item.original_name}`}
+        className={cn(
+          "absolute top-2 right-2 p-1.5 rounded-lg backdrop-blur-sm transition-colors cursor-pointer z-10",
+          confirmDelete
+            ? "bg-danger text-white animate-pulse"
+            : "bg-danger/80 hover:bg-danger text-white",
+        )}
+        aria-label={
+          confirmDelete ? "Confirm delete" : `Delete ${item.original_name}`
+        }
       >
-        <Trash2 className="w-3 h-3" />
+        {confirmDelete ? (
+          <Check className="w-3 h-3" strokeWidth={3} />
+        ) : (
+          <Trash2 className="w-3 h-3" />
+        )}
       </motion.button>
 
       {/* Filename on hover */}
