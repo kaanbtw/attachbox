@@ -132,3 +132,22 @@ pub fn get_media_asset_path(
     let path = mgr.get_absolute_path(&filename);
     path.to_string_lossy().to_string()
 }
+
+#[tauri::command]
+pub fn update_shortcut(key: String, app: tauri::AppHandle) -> Result<(), AppError> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    use tauri_plugin_global_shortcut::Shortcut;
+
+    let code = crate::key_name_to_code(&key)
+        .ok_or_else(|| AppError::Generic(format!("Unsupported key: {}", key)))?;
+
+    // Unregister all existing shortcuts, then register the new one
+    let gs = app.global_shortcut();
+    let _ = gs.unregister_all();
+
+    let shortcut = Shortcut::new(None, code);
+    gs.register(shortcut)
+        .map_err(|e| AppError::Generic(format!("Failed to register shortcut: {}", e)))?;
+
+    Ok(())
+}

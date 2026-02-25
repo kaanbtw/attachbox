@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { motion } from "framer-motion";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Keyboard,
   FolderOpen,
@@ -7,16 +7,52 @@ import {
   Save,
   CheckCircle2,
   Info,
+  ChevronDown,
+  Check,
 } from "lucide-react";
-import { getSettings, updateSettings, getStoragePath } from "@/lib/tauri-api";
+import {
+  getSettings,
+  updateSettings,
+  getStoragePath,
+  updateShortcut,
+} from "@/lib/tauri-api";
 import type { AppSettings } from "@/types";
 import { cn } from "@/lib/utils";
+
+const KEY_GROUPS = [
+  {
+    label: "Navigation",
+    keys: ["End", "Home", "Insert", "Delete", "PageUp", "PageDown"],
+  },
+  {
+    label: "System",
+    keys: ["Pause", "ScrollLock", "NumLock"],
+  },
+  {
+    label: "Function",
+    keys: [
+      "F1",
+      "F2",
+      "F3",
+      "F4",
+      "F5",
+      "F6",
+      "F7",
+      "F8",
+      "F9",
+      "F10",
+      "F11",
+      "F12",
+    ],
+  },
+];
 
 export function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [storagePath, setStoragePath] = useState("");
   const [isSaved, setIsSaved] = useState(false);
-  const [isRecordingKey, setIsRecordingKey] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -27,27 +63,34 @@ export function SettingsPage() {
     loadSettings();
   }, []);
 
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsDropdownOpen(false);
+      }
+    };
+    if (isDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () =>
+        document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [isDropdownOpen]);
+
   const handleSave = useCallback(async () => {
     if (!settings) return;
     try {
       await updateSettings(settings);
+      await updateShortcut(settings.shortcut_key);
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 2000);
     } catch (err) {
       console.error("Failed to save settings:", err);
     }
   }, [settings]);
-
-  const handleKeyCapture = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (!isRecordingKey || !settings) return;
-      e.preventDefault();
-      const key = e.key === " " ? "Space" : e.key;
-      setSettings({ ...settings, shortcut_key: key });
-      setIsRecordingKey(false);
-    },
-    [isRecordingKey, settings],
-  );
 
   if (!settings) {
     return (
@@ -73,29 +116,86 @@ export function SettingsPage() {
         <SettingSection
           icon={<Keyboard className="w-4 h-4" />}
           title="Global Shortcut"
-          description="Key to summon AttachBox from anywhere"
+          description="Key to summon AttachBox"
         >
-          <div className="flex items-center gap-2">
+          <div className="relative" ref={dropdownRef}>
+            {/* Trigger button */}
             <button
-              onClick={() => setIsRecordingKey(true)}
-              onKeyDown={handleKeyCapture}
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               className={cn(
-                "px-4 py-2 rounded-lg text-xs font-mono font-medium border transition-all cursor-pointer",
-                isRecordingKey
-                  ? "bg-accent/10 border-accent text-accent animate-pulse"
+                "flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-lg text-xs font-mono font-medium border transition-all duration-200 cursor-pointer min-w-[90px] justify-between",
+                isDropdownOpen
+                  ? "bg-surface-2 border-accent/50 text-fg shadow-[0_0_12px_oklch(0.60_0.25_280/0.15)]"
                   : "bg-surface-3 border-border text-fg hover:border-border-hover",
               )}
             >
-              {isRecordingKey ? "Press a key..." : settings.shortcut_key}
-            </button>
-            {isRecordingKey && (
-              <button
-                onClick={() => setIsRecordingKey(false)}
-                className="text-[10px] text-fg-faint hover:text-fg-muted cursor-pointer"
+              <span className="text-accent text-[11px]">
+                {settings.shortcut_key}
+              </span>
+              <motion.div
+                animate={{ rotate: isDropdownOpen ? 180 : 0 }}
+                transition={{ duration: 0.2 }}
               >
-                Cancel
-              </button>
-            )}
+                <ChevronDown className="w-3 h-3 text-fg-faint" />
+              </motion.div>
+            </button>
+
+            {/* Dropdown panel */}
+            <AnimatePresence>
+              {isDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -4, scale: 0.97 }}
+                  transition={{ duration: 0.15, ease: "easeOut" }}
+                  className="absolute right-0 top-full mt-1.5 z-50 w-56 max-h-64 overflow-y-auto rounded-xl bg-surface-1 border border-border shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl"
+                >
+                  {KEY_GROUPS.map((group, gi) => (
+                    <div key={group.label}>
+                      {gi > 0 && <div className="h-px bg-border mx-2" />}
+                      <div className="px-3 pt-2.5 pb-1">
+                        <span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-fg-faint">
+                          {group.label}
+                        </span>
+                      </div>
+                      <div className="px-1.5 pb-1.5">
+                        <div className="flex flex-wrap gap-1">
+                          {group.keys.map((key) => {
+                            const isActive = settings.shortcut_key === key;
+                            return (
+                              <button
+                                key={key}
+                                onClick={() => {
+                                  setSettings({
+                                    ...settings,
+                                    shortcut_key: key,
+                                  });
+                                  setIsDropdownOpen(false);
+                                }}
+                                className={cn(
+                                  "relative flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-mono transition-all duration-150 cursor-pointer",
+                                  isActive
+                                    ? "bg-accent/15 text-accent border border-accent/30"
+                                    : "text-fg-secondary hover:bg-surface-3 hover:text-fg border border-transparent",
+                                )}
+                              >
+                                {isActive && (
+                                  <Check
+                                    className="w-2.5 h-2.5"
+                                    strokeWidth={3}
+                                  />
+                                )}
+                                {key}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </SettingSection>
 

@@ -12,6 +12,8 @@ pub enum AppError {
     Clipboard(String),
     #[error("Serialization error: {0}")]
     Serialization(String),
+    #[error("{0}")]
+    Generic(String),
 }
 
 impl serde::Serialize for AppError {

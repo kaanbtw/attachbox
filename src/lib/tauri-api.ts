@@ -40,3 +40,7 @@ export async function getMediaAssetPath(filename: string): Promise<string> {
 export function getAssetUrl(absolutePath: string): string {
   return convertFileSrc(absolutePath);
 }
+
+export async function updateShortcut(key: string): Promise<void> {
+  return invoke("update_shortcut", { key });
+}

@@ -18,6 +18,44 @@ use tauri::{
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut, ShortcutState};
 
+pub fn key_name_to_code(name: &str) -> Option<Code> {
+    match name {
+        "End" => Some(Code::End),
+        "Home" => Some(Code::Home),
+        "Insert" => Some(Code::Insert),
+        "Delete" => Some(Code::Delete),
+        "PageUp" => Some(Code::PageUp),
+        "PageDown" => Some(Code::PageDown),
+        "Pause" => Some(Code::Pause),
+        "ScrollLock" => Some(Code::ScrollLock),
+        "F1" => Some(Code::F1),
+        "F2" => Some(Code::F2),
+        "F3" => Some(Code::F3),
+        "F4" => Some(Code::F4),
+        "F5" => Some(Code::F5),
+        "F6" => Some(Code::F6),
+        "F7" => Some(Code::F7),
+        "F8" => Some(Code::F8),
+        "F9" => Some(Code::F9),
+        "F10" => Some(Code::F10),
+        "F11" => Some(Code::F11),
+        "F12" => Some(Code::F12),
+        "`" | "Backquote" => Some(Code::Backquote),
+        "\\" | "Backslash" => Some(Code::Backslash),
+        "[" | "BracketLeft" => Some(Code::BracketLeft),
+        "]" | "BracketRight" => Some(Code::BracketRight),
+        "," | "Comma" => Some(Code::Comma),
+        "." | "Period" => Some(Code::Period),
+        "/" | "Slash" => Some(Code::Slash),
+        ";" | "Semicolon" => Some(Code::Semicolon),
+        "'" | "Quote" => Some(Code::Quote),
+        "-" | "Minus" => Some(Code::Minus),
+        "=" | "Equal" => Some(Code::Equal),
+        "NumLock" => Some(Code::NumLock),
+        _ => None,
+    }
+}
+
 fn toggle_window(app: &tauri::AppHandle, source: &str) {
     if let Some(window) = app.get_webview_window("main") {
         if window.is_visible().unwrap_or(false) {
@@ -98,12 +136,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, shortcut, event| {
+                .with_handler(|app, _shortcut, event| {
+                    // Only one shortcut registered at a time, so any press is ours
                     if event.state == ShortcutState::Pressed {
-                        let end_shortcut = Shortcut::new(None, Code::End);
-                        if shortcut == &end_shortcut {
-                            toggle_window(app, "hotkey");
-                        }
+                        toggle_window(app, "hotkey");
                     }
                 })
                 .build(),
@@ -135,8 +171,14 @@ pub fn run() {
             app.manage(Mutex::new(existing_items));
             app.manage(Mutex::new(settings));
 
-            // --- Register Global Shortcut (End key) ---
-            let shortcut = Shortcut::new(None, Code::End);
+            // --- Register Global Shortcut from settings ---
+            let initial_key = {
+                let s = app.state::<Mutex<AppSettings>>();
+                let guard = s.lock().unwrap();
+                guard.shortcut_key.clone()
+            };
+            let code = key_name_to_code(&initial_key).unwrap_or(Code::End);
+            let shortcut = Shortcut::new(None, code);
             app.global_shortcut()
                 .register(shortcut)
                 .expect("Failed to register global shortcut");
@@ -197,6 +239,7 @@ pub fn run() {
             update_settings,
             get_storage_path,
             get_media_asset_path,
+            update_shortcut,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
