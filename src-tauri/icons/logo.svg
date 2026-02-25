@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="boxGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#6D28D9"/>
+    </linearGradient>
+    <linearGradient id="clipGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C4B5FD"/>
+      <stop offset="100%" stop-color="#A78BFA"/>
+    </linearGradient>
+    <linearGradient id="innerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7C3AED"/>
+      <stop offset="50%" stop-color="#6D28D9"/>
+      <stop offset="100%" stop-color="#5B21B6"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#5B21B6" flood-opacity="0.3"/>
+    </filter>
+    <filter id="clipShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#7C3AED" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- Main Box — rounded square -->
+  <rect
+    x="80" y="110"
+    width="352" height="322"
+    rx="52" ry="52"
+    fill="url(#boxGrad)"
+    filter="url(#shadow)"
+  />
+
+  <!-- Inner box detail — subtle inset -->
+  <rect
+    x="112" y="142"
+    width="288" height="258"
+    rx="36" ry="36"
+    fill="url(#innerGrad)"
+    opacity="0.5"
+  />
+
+  <!-- Media grid dots inside the box — representing stored media -->
+  <!-- Row 1 -->
+  <rect x="148" y="195" width="72" height="72" rx="14" fill="white" opacity="0.2"/>
+  <rect x="232" y="195" width="72" height="72" rx="14" fill="white" opacity="0.15"/>
+  <rect x="316" y="195" width="72" height="72" rx="14" fill="white" opacity="0.12"/>
+  <!-- Row 2 -->
+  <rect x="148" y="279" width="72" height="72" rx="14" fill="white" opacity="0.15"/>
+  <rect x="232" y="279" width="72" height="72" rx="14" fill="white" opacity="0.1"/>
+
+  <!-- Paperclip — the "attach" element curving over the top edge of the box -->
+  <g filter="url(#clipShadow)">
+    <path
+      d="
+        M 390 68
+        L 390 220
+        Q 390 252, 358 252
+        Q 326 252, 326 220
+        L 326 120
+        Q 326 98, 348 98
+        Q 370 98, 370 120
+        L 370 200
+      "
+      fill="none"
+      stroke="url(#clipGrad)"
+      stroke-width="22"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </g>
+
+  <path
+    d="
+      M 390 68
+      L 390 100
+    "
+    fill="none"
+    stroke="white"
+    stroke-width="22"
+    stroke-linecap="round"
+    opacity="0.3"
+  />
+</svg>
