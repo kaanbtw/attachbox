@@ -1,51 +1,92 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { useCallback, useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { TitleBar } from "@/components/TitleBar";
+import { GalleryPage } from "@/pages/GalleryPage";
+import { UploadPage } from "@/pages/UploadPage";
+import { SettingsPage } from "@/pages/SettingsPage";
+import { getAllMedia } from "@/lib/tauri-api";
+import type { MediaItem, PageRoute } from "@/types";
+import { listen } from "@tauri-apps/api/event";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+export type OpenMode = "hotkey" | "tray";
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+const PAGE_VARIANTS = {
+  initial: { opacity: 0, x: 20, filter: "blur(4px)" },
+  animate: { opacity: 1, x: 0, filter: "blur(0px)" },
+  exit: { opacity: 0, x: -20, filter: "blur(4px)" },
+};
+
+export default function App() {
+  const [currentPage, setCurrentPage] = useState<PageRoute>("gallery");
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+  const [openMode, setOpenMode] = useState<OpenMode>("tray");
+
+  const fetchMedia = useCallback(async () => {
+    try {
+      const items = await getAllMedia();
+      setMediaItems(items);
+    } catch (err) {
+      console.error("Failed to fetch media:", err);
+    }
+  }, []);
+
+  // Initial data load
+  useEffect(() => {
+    fetchMedia();
+  }, [fetchMedia]);
+
+  // Listen for window open mode from Rust
+  useEffect(() => {
+    const unlisten = listen<string>("window-opened", (event) => {
+      const source = event.payload as OpenMode;
+      setOpenMode(source);
+      // Always go to gallery when opened via hotkey
+      if (source === "hotkey") {
+        setCurrentPage("gallery");
+      }
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  const renderPage = () => {
+    switch (currentPage) {
+      case "gallery":
+        return (
+          <GalleryPage
+            items={mediaItems}
+            openMode={openMode}
+            onRefresh={fetchMedia}
+          />
+        );
+      case "upload":
+        return <UploadPage onRefresh={fetchMedia} />;
+      case "settings":
+        return <SettingsPage />;
+    }
+  };
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <div className="flex flex-col h-screen bg-surface-0 overflow-hidden rounded-xl border border-border">
+      <TitleBar currentPage={currentPage} onNavigate={setCurrentPage} />
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+      <main className="flex-1 overflow-hidden">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentPage}
+            variants={PAGE_VARIANTS}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="h-full"
+          >
+            {renderPage()}
+          </motion.div>
+        </AnimatePresence>
+      </main>
+    </div>
   );
 }
-
-export default App;
