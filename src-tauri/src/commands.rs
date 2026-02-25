@@ -7,6 +7,7 @@ use ffmpeg_sidecar::download::auto_download;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State};
+use tauri_plugin_store::StoreExt;
 
 pub type ManagedMedia = Mutex<MediaManager>;
 pub type ManagedSettings = Mutex<AppSettings>;
@@ -202,7 +203,15 @@ pub fn get_settings(settings: State<'_, ManagedSettings>) -> AppSettings {
 pub fn update_settings(
     new_settings: AppSettings,
     settings: State<'_, ManagedSettings>,
+    app: tauri::AppHandle,
 ) -> Result<(), AppError> {
+    // Persist to store
+    if let Ok(store) = app.store("settings.json") {
+        store.set("shortcut_key", serde_json::Value::String(new_settings.shortcut_key.clone()));
+        store.set("auto_paste_enabled", serde_json::Value::Bool(new_settings.auto_paste_enabled));
+        store.set("storage_path", serde_json::Value::String(new_settings.storage_path.clone()));
+    }
+
     let mut current = settings.lock().unwrap();
     *current = new_settings;
     Ok(())
@@ -260,14 +269,19 @@ pub fn change_storage_path(
 
     // Re-scan to get updated items
     let scanned = mgr.scan_folder()?;
-    let mut store = items.lock().unwrap();
-    *store = scanned;
+    let mut item_store = items.lock().unwrap();
+    *item_store = scanned;
 
     // Update settings
     let final_path = mgr.storage_path().to_string_lossy().to_string();
     {
         let mut s = settings.lock().unwrap();
         s.storage_path = final_path.clone();
+    }
+
+    // Persist storage path to store
+    if let Ok(store) = app.store("settings.json") {
+        store.set("storage_path", serde_json::Value::String(final_path.clone()));
     }
 
     // Update the file watcher's watched directory

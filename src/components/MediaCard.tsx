@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Trash2,
@@ -38,13 +38,6 @@ export function MediaCard({
   const [retryKey, setRetryKey] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Reset load state when the asset URL changes
-  useEffect(() => {
-    if (assetUrl) {
-      setLoadState("loading");
-    }
-  }, [assetUrl, retryKey]);
-
   const handleMediaLoaded = useCallback(() => {
     setLoadState("loaded");
   }, []);
@@ -58,6 +51,7 @@ export function MediaCard({
 
   const handleRetry = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    setLoadState("loading");
     setRetryKey((k) => k + 1);
   }, []);
 

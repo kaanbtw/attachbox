@@ -18,6 +18,7 @@ use tauri::{
     WindowEvent,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut, ShortcutState};
+use tauri_plugin_store::StoreExt;
 
 pub fn key_name_to_code(name: &str) -> Option<Code> {
     match name {
@@ -218,19 +219,47 @@ pub fn run() {
                 .path()
                 .app_local_data_dir()
                 .expect("Failed to resolve app local data dir");
-            let media_dir = app_data.join("media");
+            let default_media_dir = app_data.join("media");
+
+            // Load persisted settings from store
+            let store = app.store("settings.json")
+                .expect("Failed to open settings store");
+
+            let saved_shortcut = store.get("shortcut_key")
+                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                .unwrap_or_else(|| "End".to_string());
+
+            let saved_auto_paste = store.get("auto_paste_enabled")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+
+            let saved_storage_path = store.get("storage_path")
+                .and_then(|v| v.as_str().map(|s| s.to_string()));
+
+            // Use saved storage path if it exists and is valid, otherwise use default
+            let media_dir = if let Some(ref saved_path) = saved_storage_path {
+                let p = std::path::PathBuf::from(saved_path);
+                if p.exists() || std::fs::create_dir_all(&p).is_ok() {
+                    p
+                } else {
+                    default_media_dir
+                }
+            } else {
+                default_media_dir
+            };
 
             // Initialize MediaManager
             let media_mgr =
                 MediaManager::new(media_dir.clone()).expect("Failed to initialize media storage");
 
-            // Scan folder for existing media (no more manifest)
+            // Scan folder for existing media
             let existing_items = media_mgr.scan_folder().unwrap_or_default();
 
-            // Load or initialize settings
+            // Build settings from persisted values
             let settings = AppSettings {
+                shortcut_key: saved_shortcut,
                 storage_path: media_mgr.storage_path().to_string_lossy().to_string(),
-                ..AppSettings::default()
+                auto_paste_enabled: saved_auto_paste,
             };
 
             // Manage state

@@ -94,15 +94,20 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
     try {
       setIsChangingFolder(!!pendingStoragePath);
 
+      let settingsToSave = { ...settings };
+
       // If storage path changed, migrate files first
       if (pendingStoragePath && pendingStoragePath !== storagePath) {
         const newPath = await changeStoragePath(pendingStoragePath);
         setStoragePath(newPath);
         setPendingStoragePath(null);
+        // Update the settings object with the new path before saving
+        settingsToSave.storage_path = newPath;
+        setSettings({ ...settings, storage_path: newPath });
       }
 
-      await updateSettings(settings);
-      await updateShortcut(settings.shortcut_key);
+      await updateSettings(settingsToSave);
+      await updateShortcut(settingsToSave.shortcut_key);
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 2000);
     } catch (err) {
