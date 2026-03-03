@@ -9,6 +9,8 @@ import {
   AlertTriangle,
   ArrowLeft,
   Plus,
+  MonitorPlay,
+  Filter,
 } from "lucide-react";
 import { importFiles, downloadFromUrl } from "@/lib/tauri-api";
 import { cn } from "@/lib/utils";
@@ -29,6 +31,7 @@ interface EmoteResult {
   name: string;
   previewUrl: string;
   downloadUrl: string;
+  source?: "7tv" | "tenor";
 }
 
 export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
@@ -39,18 +42,27 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
   const [statusMessages, setStatusMessages] = useState<UploadResult[]>([]);
 
   const [page, setPage] = useState(1);
+  const [tenorNext, setTenorNext] = useState("");
   const [hasMore, setHasMore] = useState(true);
 
-  // Auto-search 7TV GraphQL API
+  const [filters, setFilters] = useState({
+    show7TV: true,
+    showTenor: true,
+  });
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  // Auto-search API
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
       setPage(1);
+      setTenorNext("");
+      setResults([]);
       setHasMore(true);
-      fetchEmotes(searchQuery, 1);
+      fetchCombined(searchQuery, 1, "");
     }, 500);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery]);
+  }, [searchQuery, filters]);
 
   const observerTarget = useRef<HTMLDivElement>(null);
 
@@ -60,7 +72,7 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
         if (entries[0].isIntersecting && hasMore && !isSearching) {
           const nextPage = page + 1;
           setPage(nextPage);
-          fetchEmotes(searchQuery, nextPage);
+          fetchCombined(searchQuery, nextPage, tenorNext);
         }
       },
       { threshold: 0.1 },
@@ -71,9 +83,77 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
     }
 
     return () => observer.disconnect();
-  }, [hasMore, isSearching, page, searchQuery]);
+  }, [hasMore, isSearching, page, searchQuery, tenorNext, filters]);
 
-  const fetchEmotes = async (currentQuery: string, currentPage: number) => {
+  const fetchCombined = async (
+    currentQuery: string,
+    current7TVPage: number,
+    currentTenorNext: string,
+  ) => {
+    setIsSearching(true);
+    setStatusMessages([]);
+
+    let new7TVResults: EmoteResult[] = [];
+    let newTenorResults: EmoteResult[] = [];
+    let nextTenorCursor = currentTenorNext;
+
+    try {
+      const fetchPromises: Promise<void>[] = [];
+
+      if (filters.show7TV) {
+        fetchPromises.push(
+          fetchEmotesData(currentQuery, current7TVPage).then((items) => {
+            new7TVResults = items;
+          }),
+        );
+      }
+
+      if (filters.showTenor) {
+        fetchPromises.push(
+          fetchTenorData(currentQuery, currentTenorNext).then(
+            ({ items, next }) => {
+              newTenorResults = items;
+              nextTenorCursor = next;
+            },
+          ),
+        );
+      }
+
+      await Promise.allSettled(fetchPromises);
+
+      // Combine results: alternate one from each if possible, or just append together
+      const combined: EmoteResult[] = [];
+      const maxLength = Math.max(new7TVResults.length, newTenorResults.length);
+      for (let i = 0; i < maxLength; i++) {
+        if (i < new7TVResults.length) combined.push(new7TVResults[i]);
+        if (i < newTenorResults.length) combined.push(newTenorResults[i]);
+      }
+
+      setResults((prev) =>
+        current7TVPage === 1 && currentTenorNext === ""
+          ? combined
+          : [...prev, ...combined],
+      );
+      setTenorNext(nextTenorCursor);
+
+      // We have more if either source returned a full page.
+      const hasMore7TV = new7TVResults.length === 30;
+      const hasMoreTenor =
+        newTenorResults.length === 30 &&
+        nextTenorCursor !== "" &&
+        nextTenorCursor !== "0";
+      setHasMore(hasMore7TV || hasMoreTenor);
+    } catch (err) {
+      console.error("Combined search failed:", err);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const fetchEmotesData = async (
+    currentQuery: string,
+    currentPage: number,
+  ): Promise<EmoteResult[]> => {
     setIsSearching(true);
     setStatusMessages([]);
 
@@ -119,22 +199,59 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
         }
 
         return {
-          id: `${item.id}-${currentPage}`, // Avoid duplicates on pagination overlaps
+          id: `${item.id}-7tv-${currentPage}`,
           name: item.name,
           previewUrl: `${hostUrl}/4x.webp`,
           downloadUrl: `${hostUrl}/4x.gif`,
+          source: "7tv",
         };
       });
 
-      setResults((prev) =>
-        currentPage === 1 ? parsedResults : [...prev, ...parsedResults],
-      );
-      setHasMore(parsedResults.length === 30);
+      return parsedResults;
     } catch (err) {
-      console.error("Search failed:", err);
-      setStatusMessages([{ type: "error", message: "Failed to search 7TV." }]);
-    } finally {
-      setIsSearching(false);
+      console.error("7TV Fetch failed:", err);
+      return [];
+    }
+  };
+
+  const fetchTenorData = async (
+    currentQuery: string,
+    currentNext: string,
+  ): Promise<{ items: EmoteResult[]; next: string }> => {
+    try {
+      const q = currentQuery.trim();
+      let url = "";
+      if (!q) {
+        url = `https://g.tenor.com/v1/trending?key=LIVDSRZULELA&limit=30`;
+        if (currentNext) url += `&pos=${currentNext}`;
+      } else {
+        const params = new URLSearchParams({
+          q,
+          key: "LIVDSRZULELA",
+          limit: "30",
+        });
+        if (currentNext) params.append("pos", currentNext);
+        url = `https://g.tenor.com/v1/search?${params.toString()}`;
+      }
+
+      const res = await fetch(url);
+      const data = await res.json();
+      const items = data.results || [];
+
+      const parsedResults: EmoteResult[] = items.map((item: any) => {
+        return {
+          id: `${item.id}-tenor-${currentNext}`,
+          name: item.content_description || "Tenor GIF",
+          previewUrl: item.media[0]?.tinygif?.url || item.media[0]?.gif?.url,
+          downloadUrl: item.media[0]?.mediumgif?.url || item.media[0]?.gif?.url,
+          source: "tenor",
+        };
+      });
+
+      return { items: parsedResults, next: data.next || "" };
+    } catch (err) {
+      console.error("Tenor Fetch failed:", err);
+      return { items: [], next: currentNext };
     }
   };
 
@@ -193,7 +310,7 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
         </button>
         <div className="flex items-center gap-2 pointer-events-none">
           <Globe className="w-3.5 h-3.5 text-accent" />
-          <span className="text-xs font-semibold text-fg">Discover 7TV</span>
+          <span className="text-xs font-semibold text-fg">Discover</span>
         </div>
         <button
           onClick={() => getCurrentWindow().hide()}
@@ -203,16 +320,15 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
           <X className="w-4 h-4 transition-transform duration-150 group-hover:scale-110" />
         </button>
       </div>
-
-      {/* Search Input Section */}
-      <div className="p-4 py-3 shrink-0 border-b border-border">
+      {/* Search & Filter Section */}
+      <div className="p-4 py-3 shrink-0 border-b border-border flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-faint" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search for emotes..."
+            placeholder="Search emotes & GIFs..."
             className="w-full pl-9 pr-9 py-2 text-xs rounded-xl bg-surface-2 border border-border text-fg placeholder:text-fg-faint focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/30 transition-all disabled:opacity-50"
             disabled={downloadingId !== null}
             autoComplete="off"
@@ -228,6 +344,71 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
               </motion.div>
             </div>
           )}
+        </div>
+
+        {/* Filter Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setIsFilterOpen(!isFilterOpen)}
+            className={cn(
+              "w-9 h-9 flex items-center justify-center rounded-xl border transition-all duration-200",
+              isFilterOpen || !filters.show7TV || !filters.showTenor
+                ? "bg-accent text-white border-accent"
+                : "bg-surface-2 border-border text-fg hover:border-border-hover hover:bg-surface-3",
+            )}
+            title="Filter Sources"
+          >
+            <Filter className="w-3.5 h-3.5" />
+          </button>
+
+          <AnimatePresence>
+            {isFilterOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 5, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 5, scale: 0.95 }}
+                transition={{ duration: 0.15 }}
+                className="absolute right-0 top-full mt-2 w-40 bg-surface-0 border border-border/60 rounded-xl shadow-lg shadow-black/20 p-2 z-50 overflow-hidden"
+              >
+                <div className="text-[10px] font-semibold text-fg-muted mb-1.5 px-2 uppercase tracking-wide">
+                  Sources
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="flex items-center gap-2 p-2 hover:bg-surface-2 rounded-lg cursor-pointer transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={filters.show7TV}
+                      onChange={(e) =>
+                        setFilters((f) => ({ ...f, show7TV: e.target.checked }))
+                      }
+                      className="w-3.5 h-3.5 rounded-sm border-border text-accent focus:ring-accent/30 focus:ring-offset-0 bg-surface-1"
+                    />
+                    <Globe className="w-3.5 h-3.5 text-fg-secondary" />
+                    <span className="text-xs text-fg font-medium">
+                      7TV Emotes
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-2 p-2 hover:bg-surface-2 rounded-lg cursor-pointer transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={filters.showTenor}
+                      onChange={(e) =>
+                        setFilters((f) => ({
+                          ...f,
+                          showTenor: e.target.checked,
+                        }))
+                      }
+                      className="w-3.5 h-3.5 rounded-sm border-border text-accent focus:ring-accent/30 focus:ring-offset-0 bg-surface-1"
+                    />
+                    <MonitorPlay className="w-3.5 h-3.5 text-fg-secondary" />
+                    <span className="text-xs text-fg font-medium">
+                      Tenor GIFs
+                    </span>
+                  </label>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
@@ -255,6 +436,15 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
                   <span className="text-[10px] font-semibold text-white truncate w-full block text-center drop-shadow-md">
                     {emote.name}
                   </span>
+                </div>
+
+                {/* Source Icon Grid Indicator */}
+                <div className="absolute top-2 left-2 opacity-50 p-1 bg-surface-2/40 rounded-md backdrop-blur-xs">
+                  {emote.source === "7tv" ? (
+                    <Globe className="w-3 h-3 text-fg-muted" />
+                  ) : (
+                    <MonitorPlay className="w-3 h-3 text-fg-muted" />
+                  )}
                 </div>
 
                 {/* Add Button (top right) */}
@@ -287,7 +477,7 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
           !isSearching && (
             <div className="h-full flex flex-col items-center justify-center text-center opacity-60">
               <Globe className="w-8 h-8 text-fg-faint mb-3" />
-              <p className="text-xs text-fg-secondary">No emotes found.</p>
+              <p className="text-xs text-fg-secondary">No items found.</p>
             </div>
           )
         )}
