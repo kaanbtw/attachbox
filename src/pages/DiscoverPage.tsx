@@ -8,7 +8,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   ArrowLeft,
-  Plus,
+  Download,
   MonitorPlay,
   Filter,
 } from "lucide-react";
@@ -163,6 +163,7 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
           items {
             id
             name
+            animated
             host {
               url
             }
@@ -202,7 +203,7 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
           id: `${item.id}-7tv-${currentPage}`,
           name: item.name,
           previewUrl: `${hostUrl}/4x.webp`,
-          downloadUrl: `${hostUrl}/4x.gif`,
+          downloadUrl: `${hostUrl}/4x.${item.animated ? "gif" : "webp"}`,
           source: "7tv",
         };
       });
@@ -258,9 +259,7 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
   const downloadEmote = async (emote: EmoteResult) => {
     if (downloadingId) return;
     setDownloadingId(emote.id);
-    setStatusMessages([
-      { type: "success", message: `Downloading ${emote.name}...` },
-    ]);
+    setStatusMessages([{ type: "success", message: "Downloading..." }]);
 
     try {
       const tempPath = await downloadFromUrl(emote.downloadUrl);
@@ -268,7 +267,7 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
 
       if (imported.length > 0) {
         setStatusMessages([
-          { type: "success", message: `Added ${emote.name} to gallery!` },
+          { type: "success", message: "Emote added to gallery!" },
         ]);
         onRefresh();
 
@@ -463,7 +462,7 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
                         <Loader2 className="w-4 h-4" />
                       </motion.div>
                     ) : (
-                      <Plus className="w-4 h-4" />
+                      <Download className="w-3.5 h-3.5" />
                     )}
                   </button>
                 </div>
