@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Globe,
@@ -38,22 +38,48 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [statusMessages, setStatusMessages] = useState<UploadResult[]>([]);
 
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+
   // Auto-search 7TV GraphQL API
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
-      fetchEmotes(searchQuery);
+      setPage(1);
+      setHasMore(true);
+      fetchEmotes(searchQuery, 1);
     }, 500);
 
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery]);
 
-  const fetchEmotes = async (currentQuery: string) => {
+  const observerTarget = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isSearching) {
+          const nextPage = page + 1;
+          setPage(nextPage);
+          fetchEmotes(searchQuery, nextPage);
+        }
+      },
+      { threshold: 0.1 },
+    );
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current);
+    }
+
+    return () => observer.disconnect();
+  }, [hasMore, isSearching, page, searchQuery]);
+
+  const fetchEmotes = async (currentQuery: string, currentPage: number) => {
     setIsSearching(true);
     setStatusMessages([]);
 
     const query = `
-      query SearchEmotes($query: String!, $page: Int!, $sort: Sort) {
-        emotes(query: $query, page: $page, limit: 30, sort: $sort) {
+      query SearchEmotes($query: String!, $page: Int!, $sort: Sort, $filter: EmoteSearchFilter) {
+        emotes(query: $query, page: $page, limit: 30, sort: $sort, filter: $filter) {
           items {
             id
             name
@@ -67,10 +93,11 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
 
     try {
       const isTrending = !currentQuery.trim();
-      const variables: any = { query: currentQuery.trim(), page: 1 };
+      const variables: any = { query: currentQuery.trim(), page: currentPage };
 
       if (isTrending) {
         variables.sort = { value: "popularity", order: "DESCENDING" };
+        variables.filter = { category: "TRENDING_MONTH", exact_match: false };
       }
 
       const res = await fetch("https://7tv.io/v3/gql", {
@@ -92,14 +119,17 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
         }
 
         return {
-          id: item.id,
+          id: `${item.id}-${currentPage}`, // Avoid duplicates on pagination overlaps
           name: item.name,
           previewUrl: `${hostUrl}/4x.webp`,
           downloadUrl: `${hostUrl}/4x.gif`,
         };
       });
 
-      setResults(parsedResults);
+      setResults((prev) =>
+        currentPage === 1 ? parsedResults : [...prev, ...parsedResults],
+      );
+      setHasMore(parsedResults.length === 30);
     } catch (err) {
       console.error("Search failed:", err);
       setStatusMessages([{ type: "error", message: "Failed to search 7TV." }]);
@@ -260,6 +290,23 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
               <p className="text-xs text-fg-secondary">No emotes found.</p>
             </div>
           )
+        )}
+
+        {/* Infinite Scroll Target */}
+        {(hasMore || isSearching) && (
+          <div
+            ref={observerTarget}
+            className="w-full flex justify-center py-6 pb-8"
+          >
+            {isSearching && (
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+              >
+                <Loader2 className="w-6 h-6 text-fg-faint" />
+              </motion.div>
+            )}
+          </div>
         )}
       </div>
 
