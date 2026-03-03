@@ -297,31 +297,19 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
       exit={{ opacity: 0, y: -10 }}
       className="flex flex-col h-full"
     >
+      {/* Search & Action Bar */}
       <div
         data-tauri-drag-region
-        className="flex items-center justify-between h-12 px-4 shrink-0 border-b border-border/50 pt-2"
+        className="px-4 pt-4 pb-3 shrink-0 border-b border-border flex items-center gap-2"
       >
         <button
           onClick={onBack}
-          className="flex items-center gap-1.5 px-2 py-1 -ml-2 rounded-lg text-[11px] font-medium text-fg-muted hover:text-fg hover:bg-surface-2 transition-all duration-150 cursor-pointer"
+          className="group w-8 h-8 rounded-lg flex items-center justify-center text-fg-faint bg-surface-2 border border-border hover:bg-surface-3 hover:text-fg transition-all duration-200 cursor-pointer shrink-0"
+          aria-label="Back"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Back
+          <ArrowLeft className="w-4 h-4 transition-transform duration-150 group-hover:-translate-x-0.5" />
         </button>
-        <div className="flex items-center gap-2 pointer-events-none">
-          <Globe className="w-3.5 h-3.5 text-accent" />
-          <span className="text-xs font-semibold text-fg">Discover</span>
-        </div>
-        <button
-          onClick={() => getCurrentWindow().hide()}
-          className="group w-8 h-8 -mr-2 rounded-lg flex items-center justify-center text-fg-faint hover:bg-danger/15 hover:text-danger transition-all duration-200 cursor-pointer"
-          aria-label="Close to tray"
-        >
-          <X className="w-4 h-4 transition-transform duration-150 group-hover:scale-110" />
-        </button>
-      </div>
-      {/* Search & Filter Section */}
-      <div className="p-4 py-3 shrink-0 border-b border-border flex items-center gap-2">
+
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-faint" />
           <input
@@ -381,7 +369,7 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
                       onChange={(e) =>
                         setFilters((f) => ({ ...f, show7TV: e.target.checked }))
                       }
-                      className="w-3.5 h-3.5 rounded-sm border-border text-accent focus:ring-accent/30 focus:ring-offset-0 bg-surface-1"
+                      className="w-3.5 h-3.5 rounded-sm border-border text-accent accent-accent focus:ring-accent/30 focus:ring-offset-0 bg-surface-1 cursor-pointer"
                     />
                     <Globe className="w-3.5 h-3.5 text-fg-secondary" />
                     <span className="text-xs text-fg font-medium">
@@ -398,7 +386,7 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
                           showTenor: e.target.checked,
                         }))
                       }
-                      className="w-3.5 h-3.5 rounded-sm border-border text-accent focus:ring-accent/30 focus:ring-offset-0 bg-surface-1"
+                      className="w-3.5 h-3.5 rounded-sm border-border text-accent accent-accent focus:ring-accent/30 focus:ring-offset-0 bg-surface-1 cursor-pointer"
                     />
                     <MonitorPlay className="w-3.5 h-3.5 text-fg-secondary" />
                     <span className="text-xs text-fg font-medium">
@@ -410,6 +398,15 @@ export function DiscoverPage({ onBack, onRefresh }: DiscoverPageProps) {
             )}
           </AnimatePresence>
         </div>
+
+        {/* Close Button */}
+        <button
+          onClick={() => getCurrentWindow().hide()}
+          className="group w-8 h-8 rounded-lg flex items-center justify-center text-fg-faint bg-surface-2 border border-border hover:bg-danger/15 hover:text-danger hover:border-danger/30 transition-all duration-200 cursor-pointer shrink-0"
+          aria-label="Close to tray"
+        >
+          <X className="w-4 h-4 transition-transform duration-150 group-hover:scale-110" />
+        </button>
       </div>
 
       {/* Results Grid */}
