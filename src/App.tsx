@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { GalleryPage } from "@/pages/GalleryPage";
 import { UploadModal } from "@/pages/UploadPage";
+import { DiscoverPage } from "@/pages/DiscoverPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { getAllMedia } from "@/lib/tauri-api";
 import type { MediaItem } from "@/types";
 import { listen } from "@tauri-apps/api/event";
 
 export type OpenMode = "hotkey" | "tray";
-type View = "gallery" | "settings";
+type View = "gallery" | "settings" | "discover";
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>("gallery");
@@ -52,8 +53,6 @@ export default function App() {
     };
   }, [fetchMedia]);
 
-  const isSettings = currentView === "settings";
-
   return (
     <div className="flex flex-col h-screen bg-surface-0 overflow-hidden rounded-2xl">
       <main className="flex-1 overflow-hidden">
@@ -66,14 +65,20 @@ export default function App() {
             transition={{ duration: 0.15, ease: "easeOut" }}
             className="h-full"
           >
-            {isSettings ? (
+            {currentView === "settings" ? (
               <SettingsPage onBack={() => setCurrentView("gallery")} />
+            ) : currentView === "discover" ? (
+              <DiscoverPage
+                onBack={() => setCurrentView("gallery")}
+                onRefresh={fetchMedia}
+              />
             ) : (
               <GalleryPage
                 items={mediaItems}
                 openMode={openMode}
                 onRefresh={fetchMedia}
                 onOpenUpload={() => setShowUpload(true)}
+                onOpenDiscover={() => setCurrentView("discover")}
                 onOpenSettings={() => setCurrentView("settings")}
               />
             )}

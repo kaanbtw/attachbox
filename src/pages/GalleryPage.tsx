@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { AnimatePresence, motion } from "framer-motion";
-import { ImageOff, Search, Plus, Settings, X } from "lucide-react";
+import { ImageOff, Search, Plus, Settings, X, Globe } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { MediaCard } from "@/components/MediaCard";
 import type { MediaItem } from "@/types";
@@ -18,6 +18,7 @@ interface GalleryPageProps {
   openMode: OpenMode;
   onRefresh: () => void;
   onOpenUpload: () => void;
+  onOpenDiscover: () => void;
   onOpenSettings: () => void;
 }
 
@@ -30,6 +31,7 @@ export function GalleryPage({
   openMode,
   onRefresh,
   onOpenUpload,
+  onOpenDiscover,
   onOpenSettings,
 }: GalleryPageProps) {
   const autoPaste = openMode === "hotkey";
@@ -225,6 +227,13 @@ export function GalleryPage({
           >
             <Plus className="w-3.5 h-3.5" />
             Add
+          </button>
+          <button
+            onClick={onOpenDiscover}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-fg-muted hover:text-fg hover:bg-surface-2 transition-all duration-150 cursor-pointer"
+          >
+            <Globe className="w-3.5 h-3.5" />
+            Discover
           </button>
           <button
             onClick={onOpenSettings}
