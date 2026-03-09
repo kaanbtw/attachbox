@@ -2,14 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { GalleryPage } from "@/pages/GalleryPage";
 import { UploadModal } from "@/pages/UploadPage";
-import { DiscoverPage } from "@/pages/DiscoverPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { getAllMedia } from "@/lib/tauri-api";
 import type { MediaItem } from "@/types";
 import { listen } from "@tauri-apps/api/event";
 
 export type OpenMode = "hotkey" | "tray";
-type View = "gallery" | "settings" | "discover";
+type View = "gallery" | "settings";
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>("gallery");
@@ -67,18 +66,12 @@ export default function App() {
           >
             {currentView === "settings" ? (
               <SettingsPage onBack={() => setCurrentView("gallery")} />
-            ) : currentView === "discover" ? (
-              <DiscoverPage
-                onBack={() => setCurrentView("gallery")}
-                onRefresh={fetchMedia}
-              />
             ) : (
               <GalleryPage
                 items={mediaItems}
                 openMode={openMode}
                 onRefresh={fetchMedia}
                 onOpenUpload={() => setShowUpload(true)}
-                onOpenDiscover={() => setCurrentView("discover")}
                 onOpenSettings={() => setCurrentView("settings")}
               />
             )}
@@ -86,7 +79,6 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      {/* Upload modal overlay */}
       <UploadModal
         isOpen={showUpload}
         onClose={() => setShowUpload(false)}

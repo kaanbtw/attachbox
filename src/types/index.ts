@@ -1,4 +1,4 @@
-export type MediaType = "image" | "gif" | "video";
+﻿export type MediaType = "image" | "gif" | "video";
 
 export interface MediaItem {
   id: string;
@@ -8,6 +8,19 @@ export interface MediaItem {
   file_size: number;
   created_at: number;
 }
+
+export interface RemoteLibraryItem {
+  id: string;
+  kind: "remote";
+  name: string;
+  preview_url: string;
+  source_url: string;
+  source: "7tv" | "tenor";
+  media_type: MediaType;
+  created_at: number;
+}
+
+export type LibraryItem = MediaItem | RemoteLibraryItem;
 
 export interface AppSettings {
   shortcut_key: string;

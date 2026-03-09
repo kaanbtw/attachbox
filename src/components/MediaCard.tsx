@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+﻿import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Trash2,
@@ -8,13 +8,14 @@ import {
   Check,
   ImageOff,
   RefreshCw,
+  Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { MediaItem } from "@/types";
+import type { LibraryItem, RemoteLibraryItem } from "@/types";
 import type { OpenMode } from "@/App";
 
 interface MediaCardProps {
-  item: MediaItem;
+  item: LibraryItem;
   assetUrl: string;
   openMode: OpenMode;
   onSelect: () => void;
@@ -22,6 +23,10 @@ interface MediaCardProps {
 }
 
 type LoadState = "loading" | "loaded" | "error";
+
+function isRemoteLibraryItem(item: LibraryItem): item is RemoteLibraryItem {
+  return "kind" in item && item.kind === "remote";
+}
 
 export function MediaCard({
   item,
@@ -35,13 +40,14 @@ export function MediaCard({
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [retryKey, setRetryKey] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const isRemote = isRemoteLibraryItem(item);
+  const mediaName = isRemote ? item.name : item.original_name;
 
   const handleMediaLoaded = useCallback(() => {
     setLoadState("loaded");
   }, []);
 
   const handleMediaError = useCallback(() => {
-    // Only set error if we actually had a URL to load
     if (assetUrl) {
       setLoadState("error");
     }
@@ -69,7 +75,6 @@ export function MediaCard({
   }, [item.media_type]);
 
   const handleClick = useCallback(() => {
-    // Don't trigger paste if in error state
     if (loadState === "error") return;
     setJustCopied(true);
     onSelect();
@@ -99,8 +104,17 @@ export function MediaCard({
       <ImageIcon className="w-3 h-3" />
     );
 
-  // Don't render media element if URL is not ready yet
   const hasUrl = !!assetUrl;
+  const hoverLabel = isRemote
+    ? "Click to copy link"
+    : openMode === "hotkey"
+      ? "Click to paste"
+      : "Click to copy";
+  const successLabel = isRemote
+    ? "Link copied"
+    : openMode === "hotkey"
+      ? "Pasted!"
+      : "Copied!";
 
   return (
     <motion.div
@@ -117,9 +131,7 @@ export function MediaCard({
         "border border-transparent transition-all duration-200 hover:border-border-hover",
       )}
     >
-      {/* Loading / Error / Media content */}
       {!hasUrl || loadState === "loading" ? (
-        // Skeleton loader while URL is being resolved or media is loading
         <div className="w-full h-full bg-surface-2 animate-pulse flex items-center justify-center">
           <div className="w-8 h-8 rounded-full bg-surface-0/40 flex items-center justify-center">
             {item.media_type === "video" ? (
@@ -132,7 +144,6 @@ export function MediaCard({
       ) : null}
 
       {loadState === "error" ? (
-        // Error fallback with retry
         <div className="w-full h-full bg-surface-2 flex flex-col items-center justify-center gap-2">
           <ImageOff className="w-6 h-6 text-fg-faint/60" />
           <span className="text-[9px] text-fg-faint/60 font-medium">
@@ -148,7 +159,6 @@ export function MediaCard({
         </div>
       ) : null}
 
-      {/* Actual media — hidden until loaded, stays in DOM for loading */}
       {hasUrl && loadState !== "error" && (
         <>
           {item.media_type === "video" ? (
@@ -171,7 +181,7 @@ export function MediaCard({
             <img
               key={`${item.id}-${retryKey}`}
               src={assetUrl}
-              alt={item.original_name}
+              alt={mediaName}
               loading="eager"
               className={cn(
                 "w-full h-full object-cover",
@@ -185,7 +195,6 @@ export function MediaCard({
         </>
       )}
 
-      {/* Hover overlay with copy hint */}
       {loadState === "loaded" && (
         <motion.div
           initial={false}
@@ -196,12 +205,11 @@ export function MediaCard({
             <ClipboardCopy className="w-4 h-4 text-white" />
           </div>
           <span className="text-[10px] font-medium text-white/90 tracking-wide">
-            {openMode === "hotkey" ? "Click to paste" : "Click to copy"}
+            {hoverLabel}
           </span>
         </motion.div>
       )}
 
-      {/* Copied feedback */}
       <AnimatePresence>
         {justCopied && (
           <motion.div
@@ -225,13 +233,12 @@ export function MediaCard({
               <Check className="w-5 h-5 text-white" strokeWidth={3} />
             </motion.div>
             <span className="text-[10px] font-semibold text-white tracking-wide">
-              {openMode === "hotkey" ? "Pasted!" : "Copied!"}
+              {successLabel}
             </span>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Type badge */}
       <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/50 text-[10px] text-white/70 backdrop-blur-sm">
         {typeIcon}
         <span className="uppercase font-medium tracking-wider">
@@ -239,7 +246,15 @@ export function MediaCard({
         </span>
       </div>
 
-      {/* Delete button */}
+      {isRemote && (
+        <div className="absolute top-2 left-2 translate-y-6 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/50 text-[10px] text-white/70 backdrop-blur-sm">
+          <Globe className="w-3 h-3" />
+          <span className="uppercase font-medium tracking-wider">
+            {item.source}
+          </span>
+        </div>
+      )}
+
       <motion.button
         initial={false}
         animate={{
@@ -253,9 +268,7 @@ export function MediaCard({
             ? "bg-danger text-white animate-pulse"
             : "bg-danger/80 hover:bg-danger text-white",
         )}
-        aria-label={
-          confirmDelete ? "Confirm delete" : `Delete ${item.original_name}`
-        }
+        aria-label={confirmDelete ? "Confirm delete" : `Delete ${mediaName}`}
       >
         {confirmDelete ? (
           <Check className="w-3 h-3" strokeWidth={3} />
@@ -264,7 +277,6 @@ export function MediaCard({
         )}
       </motion.button>
 
-      {/* Filename on hover */}
       {loadState === "loaded" && (
         <motion.div
           initial={false}
@@ -275,7 +287,7 @@ export function MediaCard({
           className="absolute bottom-0 left-0 right-0 p-2.5 pointer-events-none bg-linear-to-t from-black/60 to-transparent"
         >
           <p className="text-[10px] text-white/90 truncate font-medium">
-            {item.original_name}
+            {mediaName}
           </p>
         </motion.div>
       )}
