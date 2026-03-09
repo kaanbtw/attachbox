@@ -101,6 +101,7 @@ export function GalleryPage({
   const observerTarget = useRef<HTMLDivElement>(null);
   const libraryScrollTopRef = useRef(0);
   const discoverScrollTopRef = useRef(0);
+  const lastDiscoverRequestKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     getRemoteLibraryItems()
@@ -111,15 +112,7 @@ export function GalleryPage({
   }, []);
 
   const libraryItems = useMemo<LibraryItem[]>(() => {
-    return [...remoteItems, ...items].sort((left, right) => {
-      const leftCreatedAt = isRemoteLibraryItem(left)
-        ? left.created_at
-        : left.created_at;
-      const rightCreatedAt = isRemoteLibraryItem(right)
-        ? right.created_at
-        : right.created_at;
-      return rightCreatedAt - leftCreatedAt;
-    });
+    return [...remoteItems, ...items].sort((left, right) => right.created_at - left.created_at);
   }, [items, remoteItems]);
 
   const filteredItems = useMemo(() => {
@@ -133,6 +126,11 @@ export function GalleryPage({
   const remoteUrlSet = useMemo(
     () => new Set(remoteItems.map((item) => item.source_url)),
     [remoteItems],
+  );
+
+  const discoverRequestKey = useMemo(
+    () => JSON.stringify({ query: discoverQuery.trim(), filters }),
+    [discoverQuery, filters],
   );
 
   const rowCount = Math.ceil(filteredItems.length / COLUMN_COUNT);
@@ -345,17 +343,19 @@ export function GalleryPage({
           nextTenorCursor !== "" &&
           nextTenorCursor !== "0";
         setHasMore(hasMore7TV || hasMoreTenor);
+        lastDiscoverRequestKeyRef.current = discoverRequestKey;
       } catch (error) {
         console.error("Combined search failed:", error);
       } finally {
         setIsSearching(false);
       }
     },
-    [fetchEmotesData, fetchTenorData, filters],
+    [discoverRequestKey, fetchEmotesData, fetchTenorData, filters],
   );
 
   useEffect(() => {
     if (activeMode !== "discover") return;
+    if (lastDiscoverRequestKeyRef.current === discoverRequestKey) return;
 
     const debounce = setTimeout(() => {
       setPage(1);
@@ -366,7 +366,7 @@ export function GalleryPage({
     }, 500);
 
     return () => clearTimeout(debounce);
-  }, [activeMode, discoverQuery, filters, fetchCombined]);
+  }, [activeMode, discoverQuery, discoverRequestKey, fetchCombined]);
 
   useEffect(() => {
     if (activeMode !== "discover") return;
@@ -439,9 +439,7 @@ export function GalleryPage({
       await navigator.clipboard.writeText(item.source_url);
     } catch (error) {
       console.error("Copy remote link failed:", error);
-      setStatusMessages([
-        { type: "error", message: "Failed to copy link." },
-      ]);
+      setStatusMessages([{ type: "error", message: "Failed to copy link." }]);
     }
   }, []);
 
@@ -451,9 +449,7 @@ export function GalleryPage({
         if (isRemoteLibraryItem(item)) {
           const nextItems = await removeRemoteLibraryItem(item.id);
           setRemoteItems(nextItems);
-          setStatusMessages([
-            { type: "success", message: "Removed from library." },
-          ]);
+          setStatusMessages([{ type: "success", message: "Removed from library." }]);
           return;
         }
 
@@ -461,9 +457,7 @@ export function GalleryPage({
         onRefresh();
       } catch (error) {
         console.error("Delete failed:", error);
-        setStatusMessages([
-          { type: "error", message: "Failed to remove item." },
-        ]);
+        setStatusMessages([{ type: "error", message: "Failed to remove item." }]);
       }
     },
     [onRefresh],
@@ -490,16 +484,12 @@ export function GalleryPage({
         setStatusMessages([
           {
             type: "success",
-            message: result.added
-              ? "Added to library."
-              : "Already in library.",
+            message: result.added ? "Added to library." : "Already in library.",
           },
         ]);
       } catch (error) {
         console.error("Save discover item failed:", error);
-        setStatusMessages([
-          { type: "error", message: "Failed to add item to library." },
-        ]);
+        setStatusMessages([{ type: "error", message: "Failed to add item to library." }]);
       } finally {
         setSavingId(null);
       }
