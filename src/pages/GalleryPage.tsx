@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { AdaptiveMedia } from "@/components/AdaptiveMedia";
 import { MediaCard } from "@/components/MediaCard";
 import type { LibraryItem, MediaItem, MediaType, RemoteLibraryItem } from "@/types";
 import type { OpenMode } from "@/App";
@@ -71,6 +72,73 @@ function getRemoteItemId(result: EmoteResult) {
   return `${result.source}:${result.downloadUrl}`;
 }
 
+function DiscoverResultCard({
+  emote,
+  index,
+  alreadyAdded,
+  savingId,
+  onSave,
+}: {
+  emote: EmoteResult;
+  index: number;
+  alreadyAdded: boolean;
+  savingId: string | null;
+  onSave: (item: EmoteResult) => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ delay: index * 0.02 }}
+      className="group relative aspect-square rounded-xl bg-surface-2 border border-border overflow-hidden flex items-center justify-center"
+    >
+      <AdaptiveMedia
+        assetUrl={emote.previewUrl}
+        mediaType={emote.mediaType}
+        mediaName={emote.name}
+        retryKey={0}
+        onLoaded={() => {}}
+        onError={() => {}}
+        foregroundWrapperClassName="relative z-[1]"
+        renderMode={emote.source === "7tv" && emote.mediaType === "image" ? "fill" : "adaptive"}
+      />
+      <div className="absolute inset-0 bg-linear-to-b from-black/10 via-transparent to-black/10" />
+
+      <div className="absolute inset-x-0 bottom-0 p-1.5 bg-linear-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <span className="text-[10px] font-semibold text-white truncate w-full block text-center drop-shadow-md">
+          {emote.name}
+        </span>
+      </div>
+
+      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <button
+          onClick={() => onSave(emote)}
+          disabled={savingId !== null || alreadyAdded}
+          className={cn(
+            "w-7 h-7 rounded-lg backdrop-blur-md border shadow-sm flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed",
+            alreadyAdded
+              ? "bg-success/20 text-success border-success/30 opacity-100"
+              : "bg-surface-0/60 text-fg hover:bg-accent hover:text-white border-border disabled:opacity-50",
+          )}
+        >
+          {savingId === emote.id ? (
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+            >
+              <Loader2 className="w-4 h-4" />
+            </motion.div>
+          ) : alreadyAdded ? (
+            <Check className="w-3.5 h-3.5" />
+          ) : (
+            <Plus className="w-3.5 h-3.5" />
+          )}
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
 export function GalleryPage({
   items,
   openMode,
@@ -112,7 +180,9 @@ export function GalleryPage({
   }, []);
 
   const libraryItems = useMemo<LibraryItem[]>(() => {
-    return [...remoteItems, ...items].sort((left, right) => right.created_at - left.created_at);
+    return [...remoteItems, ...items].sort(
+      (left, right) => right.created_at - left.created_at,
+    );
   }, [items, remoteItems]);
 
   const filteredItems = useMemo(() => {
@@ -272,7 +342,8 @@ export function GalleryPage({
             id: `${item.id}-tenor-${currentNext}`,
             name: item.content_description || "Tenor GIF",
             previewUrl: item.media[0]?.tinygif?.url || item.media[0]?.gif?.url,
-            downloadUrl: item.media[0]?.mediumgif?.url || item.media[0]?.gif?.url,
+            downloadUrl:
+              item.media[0]?.mediumgif?.url || item.media[0]?.gif?.url,
             source: "tenor" as const,
             mediaType: "gif" as const,
           })),
@@ -625,65 +696,16 @@ export function GalleryPage({
         >
           {results.length > 0 ? (
             <div className="w-full grid grid-cols-3 gap-3">
-              {results.map((emote, index) => {
-                const alreadyAdded = remoteUrlSet.has(emote.downloadUrl);
-                return (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: index * 0.02 }}
-                    key={emote.id}
-                    className="group relative aspect-square rounded-xl bg-surface-2 border border-border overflow-hidden flex items-center justify-center"
-                  >
-                    <img
-                      src={emote.previewUrl}
-                      alt={emote.name}
-                      className="w-full h-full p-2.5 object-contain"
-                      loading="lazy"
-                    />
-
-                    <div className="absolute inset-x-0 bottom-0 p-1.5 bg-linear-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                      <span className="text-[10px] font-semibold text-white truncate w-full block text-center drop-shadow-md">
-                        {emote.name}
-                      </span>
-                    </div>
-
-                    <div className="absolute top-2 left-2 opacity-50 p-1 bg-surface-2/40 rounded-md backdrop-blur-xs">
-                      {emote.source === "7tv" ? (
-                        <Globe className="w-3 h-3 text-fg-muted" />
-                      ) : (
-                        <MonitorPlay className="w-3 h-3 text-fg-muted" />
-                      )}
-                    </div>
-
-                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => handleSaveDiscoverItem(emote)}
-                        disabled={savingId !== null || alreadyAdded}
-                        className={cn(
-                          "w-7 h-7 rounded-lg backdrop-blur-md border shadow-sm flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed",
-                          alreadyAdded
-                            ? "bg-success/20 text-success border-success/30 opacity-100"
-                            : "bg-surface-0/60 text-fg hover:bg-accent hover:text-white border-border disabled:opacity-50",
-                        )}
-                      >
-                        {savingId === emote.id ? (
-                          <motion.div
-                            animate={{ rotate: 360 }}
-                            transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                          >
-                            <Loader2 className="w-4 h-4" />
-                          </motion.div>
-                        ) : alreadyAdded ? (
-                          <Check className="w-3.5 h-3.5" />
-                        ) : (
-                          <Plus className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                    </div>
-                  </motion.div>
-                );
-              })}
+              {results.map((emote, index) => (
+                <DiscoverResultCard
+                  key={emote.id}
+                  emote={emote}
+                  index={index}
+                  alreadyAdded={remoteUrlSet.has(emote.downloadUrl)}
+                  savingId={savingId}
+                  onSave={handleSaveDiscoverItem}
+                />
+              ))}
             </div>
           ) : (
             !isSearching && (
@@ -868,3 +890,8 @@ export function GalleryPage({
     </div>
   );
 }
+
+
+
+
+

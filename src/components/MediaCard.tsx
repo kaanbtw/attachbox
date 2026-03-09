@@ -8,8 +8,8 @@ import {
   Check,
   ImageOff,
   RefreshCw,
-  Globe,
 } from "lucide-react";
+import { AdaptiveMedia } from "@/components/AdaptiveMedia";
 import { cn } from "@/lib/utils";
 import type { LibraryItem, RemoteLibraryItem } from "@/types";
 import type { OpenMode } from "@/App";
@@ -127,12 +127,12 @@ export function MediaCard({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       className={cn(
-        "relative group aspect-square rounded-xl overflow-hidden cursor-pointer",
+        "relative group aspect-square overflow-hidden cursor-pointer bg-surface-2 rounded-xl",
         "border border-transparent transition-all duration-200 hover:border-border-hover",
       )}
     >
       {!hasUrl || loadState === "loading" ? (
-        <div className="w-full h-full bg-surface-2 animate-pulse flex items-center justify-center">
+        <div className="absolute inset-0 bg-surface-2 animate-pulse flex items-center justify-center">
           <div className="w-8 h-8 rounded-full bg-surface-0/40 flex items-center justify-center">
             {item.media_type === "video" ? (
               <Film className="w-4 h-4 text-fg-faint/50" />
@@ -144,7 +144,7 @@ export function MediaCard({
       ) : null}
 
       {loadState === "error" ? (
-        <div className="w-full h-full bg-surface-2 flex flex-col items-center justify-center gap-2">
+        <div className="absolute inset-0 bg-surface-2 flex flex-col items-center justify-center gap-2">
           <ImageOff className="w-6 h-6 text-fg-faint/60" />
           <span className="text-[9px] text-fg-faint/60 font-medium">
             Load failed
@@ -160,39 +160,21 @@ export function MediaCard({
       ) : null}
 
       {hasUrl && loadState !== "error" && (
-        <>
-          {item.media_type === "video" ? (
-            <video
-              key={`${item.id}-${retryKey}`}
-              ref={videoRef}
-              src={assetUrl}
-              muted
-              loop
-              playsInline
-              preload="metadata"
-              className={cn(
-                "w-full h-full object-cover",
-                loadState === "loading" && "absolute inset-0 opacity-0",
-              )}
-              onLoadedData={handleMediaLoaded}
-              onError={handleMediaError}
-            />
-          ) : (
-            <img
-              key={`${item.id}-${retryKey}`}
-              src={assetUrl}
-              alt={mediaName}
-              loading="eager"
-              className={cn(
-                "w-full h-full object-cover",
-                loadState === "loading" && "absolute inset-0 opacity-0",
-              )}
-              onLoad={handleMediaLoaded}
-              onError={handleMediaError}
-              draggable={false}
-            />
-          )}
-        </>
+        <div className="absolute inset-0">
+          <AdaptiveMedia
+            assetUrl={assetUrl}
+            mediaType={item.media_type}
+            mediaName={mediaName}
+            retryKey={retryKey}
+            videoRef={videoRef}
+            onLoaded={handleMediaLoaded}
+            onError={handleMediaError}
+            backgroundClassName={loadState === "loading" ? "opacity-0" : undefined}
+            foregroundWrapperClassName={loadState === "loading" ? "opacity-0" : undefined}
+            renderMode={isRemote && item.source === "7tv" && item.media_type === "image" ? "fill" : "adaptive"}
+          />
+          <div className="absolute inset-0 bg-linear-to-b from-black/10 via-transparent to-black/10" />
+        </div>
       )}
 
       {loadState === "loaded" && (
@@ -239,21 +221,12 @@ export function MediaCard({
         )}
       </AnimatePresence>
 
-      <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/50 text-[10px] text-white/70 backdrop-blur-sm">
+      <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/50 text-[10px] text-white/70 backdrop-blur-sm z-10">
         {typeIcon}
         <span className="uppercase font-medium tracking-wider">
           {item.media_type}
         </span>
       </div>
-
-      {isRemote && (
-        <div className="absolute top-2 left-2 translate-y-6 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/50 text-[10px] text-white/70 backdrop-blur-sm">
-          <Globe className="w-3 h-3" />
-          <span className="uppercase font-medium tracking-wider">
-            {item.source}
-          </span>
-        </div>
-      )}
 
       <motion.button
         initial={false}
@@ -284,7 +257,7 @@ export function MediaCard({
             opacity: isHovered && !justCopied ? 1 : 0,
             y: isHovered ? 0 : 4,
           }}
-          className="absolute bottom-0 left-0 right-0 p-2.5 pointer-events-none bg-linear-to-t from-black/60 to-transparent"
+          className="absolute bottom-0 left-0 right-0 p-2.5 pointer-events-none bg-linear-to-t from-black/60 to-transparent z-10"
         >
           <p className="text-[10px] text-white/90 truncate font-medium">
             {mediaName}
