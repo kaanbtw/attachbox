@@ -199,6 +199,30 @@ pub fn select_and_paste(
     Ok(())
 }
 
+
+#[tauri::command]
+pub fn paste_text(
+    text: String,
+    auto_paste: bool,
+    app: tauri::AppHandle,
+) -> Result<(), AppError> {
+    clipboard::copy_text_to_clipboard(&text)?;
+
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+    }
+
+    if auto_paste {
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            if let Err(e) = clipboard::simulate_paste() {
+                eprintln!("Auto-paste failed: {}", e);
+            }
+        });
+    }
+
+    Ok(())
+}
 #[tauri::command]
 pub fn get_settings(settings: State<'_, ManagedSettings>) -> AppSettings {
     settings.lock().unwrap().clone()

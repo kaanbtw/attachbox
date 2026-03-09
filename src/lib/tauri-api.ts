@@ -25,6 +25,13 @@ export async function selectAndPaste(
   return invoke("select_and_paste", { id, autoPaste });
 }
 
+export async function pasteText(
+  text: string,
+  autoPaste: boolean,
+): Promise<void> {
+  return invoke("paste_text", { text, autoPaste });
+}
+
 export async function getSettings(): Promise<AppSettings> {
   return invoke<AppSettings>("get_settings");
 }

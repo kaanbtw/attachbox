@@ -1,8 +1,9 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Check,
+  ClipboardCopy,
   Filter,
   Globe,
   ImageOff,
@@ -23,6 +24,7 @@ import {
   deleteMedia,
   getAssetUrl,
   getMediaAssetPath,
+  pasteText,
   selectAndPaste,
 } from "@/lib/tauri-api";
 import {
@@ -75,22 +77,48 @@ function getRemoteItemId(result: EmoteResult) {
 function DiscoverResultCard({
   emote,
   index,
+  openMode,
   alreadyAdded,
   savingId,
   onSave,
+  onSelect,
 }: {
   emote: EmoteResult;
   index: number;
+  openMode: OpenMode;
   alreadyAdded: boolean;
   savingId: string | null;
   onSave: (item: EmoteResult) => void;
+  onSelect: (item: EmoteResult) => void;
 }) {
+  const [isHovered, setIsHovered] = useState(false);
+  const [justCopied, setJustCopied] = useState(false);
+  const hoverLabel = openMode === "hotkey" ? "Click to paste" : "Click to copy";
+  const successLabel = openMode === "hotkey" ? "Pasted!" : "Copied!";
+
+  const handleClick = useCallback(() => {
+    setJustCopied(true);
+    onSelect(emote);
+    setTimeout(() => setJustCopied(false), 1200);
+  }, [emote, onSelect]);
+
+  const handleSaveClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      onSave(emote);
+    },
+    [emote, onSave],
+  );
+
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.9 }}
+      initial={{ opacity: 0, scale: 0.92 }}
       animate={{ opacity: 1, scale: 1 }}
-      transition={{ delay: index * 0.02 }}
-      className="group relative aspect-square rounded-xl bg-surface-2 border border-border overflow-hidden flex items-center justify-center"
+      transition={{ duration: 0.2, delay: index * 0.02 }}
+      onClick={handleClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className="group relative aspect-square rounded-xl bg-surface-2 border border-border overflow-hidden flex items-center justify-center cursor-pointer"
     >
       <AdaptiveMedia
         assetUrl={emote.previewUrl}
@@ -104,15 +132,59 @@ function DiscoverResultCard({
       />
       <div className="absolute inset-0 bg-linear-to-b from-black/10 via-transparent to-black/10" />
 
+      <AnimatePresence>
+        {justCopied && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            className="absolute inset-0 bg-accent/80 backdrop-blur-sm flex flex-col items-center justify-center gap-1.5 z-20"
+          >
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{
+                type: "spring",
+                stiffness: 500,
+                damping: 20,
+                delay: 0.05,
+              }}
+              className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center"
+            >
+              <Check className="w-5 h-5 text-white" strokeWidth={3} />
+            </motion.div>
+            <span className="text-[10px] font-semibold text-white tracking-wide">
+              {successLabel}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {!justCopied && (
+        <motion.div
+          initial={false}
+          animate={{ opacity: isHovered ? 1 : 0 }}
+          className="absolute inset-0 bg-black/50 backdrop-blur-[2px] flex flex-col items-center justify-center gap-1.5 pointer-events-none z-10"
+        >
+          <div className="w-9 h-9 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center border border-white/20">
+            <ClipboardCopy className="w-4 h-4 text-white" />
+          </div>
+          <span className="text-[10px] font-medium text-white/90 tracking-wide">
+            {hoverLabel}
+          </span>
+        </motion.div>
+      )}
+
       <div className="absolute inset-x-0 bottom-0 p-1.5 bg-linear-to-t from-black/80 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-10">
         <span className="text-[10px] font-semibold text-white truncate w-full block text-center drop-shadow-md">
           {emote.name}
         </span>
       </div>
 
-      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
         <button
-          onClick={() => onSave(emote)}
+          onClick={handleSaveClick}
           disabled={savingId !== null || alreadyAdded}
           className={cn(
             "w-7 h-7 rounded-lg backdrop-blur-md border shadow-sm flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed",
@@ -505,6 +577,22 @@ export function GalleryPage({
     [autoPaste],
   );
 
+  const handleSelectDiscover = useCallback(
+    async (item: EmoteResult) => {
+      try {
+        await pasteText(item.downloadUrl, autoPaste);
+      } catch (error) {
+        console.error("Paste discover link failed:", error);
+        setStatusMessages([
+          {
+            type: "error",
+            message: autoPaste ? "Failed to paste link." : "Failed to copy link.",
+          },
+        ]);
+      }
+    },
+    [autoPaste],
+  );
   const handleSelectRemote = useCallback(async (item: RemoteLibraryItem) => {
     try {
       await navigator.clipboard.writeText(item.source_url);
@@ -701,9 +789,11 @@ export function GalleryPage({
                   key={emote.id}
                   emote={emote}
                   index={index}
+                  openMode={openMode}
                   alreadyAdded={remoteUrlSet.has(emote.downloadUrl)}
                   savingId={savingId}
                   onSave={handleSaveDiscoverItem}
+                  onSelect={handleSelectDiscover}
                 />
               ))}
             </div>
@@ -890,8 +980,3 @@ export function GalleryPage({
     </div>
   );
 }
-
-
-
-
-

@@ -293,7 +293,7 @@ pub fn run() {
                 .icon(icon)
                 .menu(&menu)
                 .show_menu_on_left_click(false)
-                .tooltip("AttachBox – Quick Media Board")
+                .tooltip("AttachBox - Quick Media Board")
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => {
                         toggle_window(app, "tray");
@@ -334,6 +334,7 @@ pub fn run() {
             download_from_url,
             delete_media,
             select_and_paste,
+            paste_text,
             get_settings,
             update_settings,
             get_storage_path,

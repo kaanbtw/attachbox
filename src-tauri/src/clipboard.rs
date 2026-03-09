@@ -39,15 +39,9 @@ pub fn copy_file_to_clipboard(file_path: &Path) -> Result<(), AppError> {
         }
 
         // Write DROPFILES header
-        // pFiles offset (u32) at byte 0
         std::ptr::write(ptr as *mut u32, header_size);
-        // pt.x (i32) at byte 4 = 0
-        // pt.y (i32) at byte 8 = 0
-        // fNC (i32) at byte 12 = 0
-        // fWide (i32) at byte 16 = 1 (Unicode)
         std::ptr::write((ptr.add(16)) as *mut i32, 1);
 
-        // Write the wide string after the header
         let dest = ptr.add(header_size as usize) as *mut u16;
         std::ptr::copy_nonoverlapping(wide.as_ptr(), dest, wide.len());
 
@@ -74,6 +68,56 @@ pub fn copy_file_to_clipboard(file_path: &Path) -> Result<(), AppError> {
 pub fn copy_file_to_clipboard(_file_path: &Path) -> Result<(), AppError> {
     Err(AppError::Clipboard(
         "File clipboard not implemented for this platform".into(),
+    ))
+}
+
+#[cfg(target_os = "windows")]
+pub fn copy_text_to_clipboard(text: &str) -> Result<(), AppError> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    use windows::Win32::Foundation::*;
+    use windows::Win32::System::DataExchange::*;
+    use windows::Win32::System::Memory::*;
+
+    unsafe {
+        let wide: Vec<u16> = OsStr::new(text)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let total_size = wide.len() * std::mem::size_of::<u16>();
+
+        let hmem = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, total_size)
+            .map_err(|_| AppError::Clipboard("GlobalAlloc failed".into()))?;
+
+        let ptr = GlobalLock(hmem) as *mut u16;
+        if ptr.is_null() {
+            let _ = GlobalFree(hmem);
+            return Err(AppError::Clipboard("GlobalLock failed".into()));
+        }
+
+        std::ptr::copy_nonoverlapping(wide.as_ptr(), ptr, wide.len());
+        let _ = GlobalUnlock(hmem);
+
+        if OpenClipboard(HWND::default()).is_ok() {
+            let _ = EmptyClipboard();
+            let cf_unicode_text = 13u32; // CF_UNICODETEXT
+            SetClipboardData(cf_unicode_text, HANDLE(hmem.0))
+                .map_err(|_| AppError::Clipboard("SetClipboardData failed".into()))?;
+            let _ = CloseClipboard();
+        } else {
+            let _ = GlobalFree(hmem);
+            return Err(AppError::Clipboard("Cannot open clipboard".into()));
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn copy_text_to_clipboard(_text: &str) -> Result<(), AppError> {
+    Err(AppError::Clipboard(
+        "Text clipboard not implemented for this platform".into(),
     ))
 }
 
