@@ -25,9 +25,11 @@
   --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  --radius-lg: 12px;
-  --radius-md: 8px;
-  --radius-sm: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-2xl: 30px;
 }
 
 @layer base {
@@ -41,7 +43,7 @@
   body,
   #root {
     height: 100%;
-    background: var(--color-surface-0);
+    background: transparent;
     color: var(--color-fg);
     font-family: var(--font-sans);
     overflow: hidden;
@@ -67,6 +69,10 @@
   }
   [data-tauri-drag-region] * {
     -webkit-app-region: no-drag;
+  }
+
+  :where(.rounded-sm, .rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl) {
+    corner-shape: squircle squircle squircle squircle;
   }
 }
 

@@ -707,10 +707,10 @@ export function GalleryPage({
             <button
               onClick={() => setIsFilterOpen((open) => !open)}
               className={cn(
-                "w-9 h-9 flex items-center justify-center rounded-xl border transition-all duration-200",
+                "group/utility w-9 h-9 flex items-center justify-center rounded-xl border border-border bg-surface-2 text-fg-faint shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-all duration-200 cursor-pointer",
                 isFilterOpen || !filters.show7TV || !filters.showTenor
-                  ? "bg-accent text-white border-accent"
-                  : "bg-surface-2 border-border text-fg hover:border-border-hover hover:bg-surface-3",
+                  ? "bg-accent text-white border-accent shadow-[0_0_0_1px_rgba(255,255,255,0.04)]"
+                  : "hover:border-border-hover hover:bg-surface-3 hover:text-fg",
               )}
               title="Filter Sources"
             >
@@ -769,10 +769,10 @@ export function GalleryPage({
 
         <button
           onClick={() => getCurrentWindow().hide()}
-          className="group w-8 h-8 rounded-lg flex items-center justify-center text-fg-faint bg-surface-2 border border-border hover:bg-danger/15 hover:text-danger hover:border-danger/30 transition-all duration-200 cursor-pointer shrink-0"
+          className="group/utility w-9 h-9 rounded-xl flex items-center justify-center text-fg-faint bg-surface-2 border border-border shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] hover:bg-surface-3 hover:text-fg hover:border-border-hover transition-all duration-200 cursor-pointer shrink-0"
           aria-label="Close to tray"
         >
-          <X className="w-4 h-4 transition-transform duration-150 group-hover:scale-110" />
+          <X className="w-4 h-4 transition-transform duration-150 group-hover/utility:scale-110 group-hover/utility:text-danger" />
         </button>
       </div>
 
@@ -966,16 +966,20 @@ export function GalleryPage({
             <Plus className="w-3.5 h-3.5" />
             Add
           </button>
+        </div>
+        <div className="flex items-center gap-2 text-fg-faint">
+          <span className="text-[10px]">
+            {resultCount} item{resultCount !== 1 ? "s" : ""}
+          </span>
+          <div className="h-3.5 w-px bg-border" />
           <button
             onClick={onOpenSettings}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-fg-muted hover:text-fg hover:bg-surface-2 transition-all duration-150 cursor-pointer"
+            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-medium text-fg-muted hover:text-fg hover:bg-surface-2 transition-all duration-150 cursor-pointer"
+            aria-label="Open settings"
           >
             <Settings className="w-3.5 h-3.5" />
           </button>
         </div>
-        <span className="text-[10px] text-fg-faint">
-          {resultCount} item{resultCount !== 1 ? "s" : ""}
-        </span>
       </div>
     </div>
   );

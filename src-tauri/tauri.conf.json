@@ -18,7 +18,9 @@
         "height": 560,
         "resizable": false,
         "decorations": false,
-        "transparent": false,
+        "transparent": true,
+        "backgroundColor": "#00000000",
+        "shadow": false,
         "visible": false,
         "skipTaskbar": true
       }

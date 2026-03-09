@@ -53,8 +53,8 @@ export default function App() {
   }, [fetchMedia]);
 
   return (
-    <div className="flex flex-col h-screen bg-surface-0 overflow-hidden rounded-2xl">
-      <main className="flex-1 overflow-hidden">
+    <div className="h-screen bg-transparent overflow-hidden rounded-[28px] [corner-shape:squircle_squircle_squircle_squircle]">
+      <main className="h-full overflow-hidden rounded-[28px] bg-surface-0 border border-border/70 shadow-[0_20px_60px_rgba(0,0,0,0.38)] [corner-shape:squircle_squircle_squircle_squircle]">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={currentView}
@@ -62,7 +62,7 @@ export default function App() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.97 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
-            className="h-full"
+            className="h-full overflow-hidden rounded-[28px] [corner-shape:squircle_squircle_squircle_squircle]"
           >
             {currentView === "settings" ? (
               <SettingsPage onBack={() => setCurrentView("gallery")} />
