@@ -43,7 +43,7 @@ interface GalleryPageProps {
 }
 
 interface StatusMessage {
-  type: "success" | "error";
+  type: "success" | "error" | "danger";
   message: string;
 }
 
@@ -250,6 +250,17 @@ export function GalleryPage({
         console.error("Failed to load remote library items:", error);
       });
   }, []);
+  useEffect(() => {
+    if (statusMessages.length === 0) return;
+
+    const timeout = window.setTimeout(
+      () => setStatusMessages([]),
+      statusMessages[0]?.type === "error" ? 2600 : 1800,
+    );
+
+    return () => window.clearTimeout(timeout);
+  }, [statusMessages]);
+
 
   const libraryItems = useMemo<LibraryItem[]>(() => {
     return [...remoteItems, ...items].sort(
@@ -608,12 +619,13 @@ export function GalleryPage({
         if (isRemoteLibraryItem(item)) {
           const nextItems = await removeRemoteLibraryItem(item.id);
           setRemoteItems(nextItems);
-          setStatusMessages([{ type: "success", message: "Removed from library." }]);
+          setStatusMessages([{ type: "danger", message: "Removed from library." }]);
           return;
         }
 
         await deleteMedia(item.id);
         onRefresh();
+        setStatusMessages([{ type: "danger", message: "Removed from library." }]);
       } catch (error) {
         console.error("Delete failed:", error);
         setStatusMessages([{ type: "error", message: "Failed to remove item." }]);
@@ -666,7 +678,7 @@ export function GalleryPage({
         : "Search library...";
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="relative flex flex-col h-full">
       <div
         data-tauri-drag-region
         className="px-4 pt-4 pb-3 shrink-0 border-b border-border flex items-center gap-2"
@@ -899,37 +911,35 @@ export function GalleryPage({
           </div>
         </div>
       )}
-
       <AnimatePresence>
         {statusMessages.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="px-4 pb-3 space-y-1.5 shrink-0"
-          >
-            {statusMessages.map((result, index) => (
-              <motion.div
-                key={`${result.message}-${index}`}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded-lg text-[11px]",
-                  result.type === "success"
-                    ? "bg-success/10 text-success border border-success/20"
-                    : "bg-danger/10 text-danger border border-danger/20",
-                )}
-              >
-                {result.type === "success" ? (
-                  <Check className="w-3.5 h-3.5 shrink-0" />
-                ) : (
-                  <X className="w-3.5 h-3.5 shrink-0" />
-                )}
-                {result.message}
-              </motion.div>
-            ))}
-          </motion.div>
+          <div className="pointer-events-none absolute bottom-13 right-2 z-20 flex justify-end">
+            <motion.div
+              key={`status-${statusMessages[0]?.message}`}
+              initial={{ opacity: 0, x: 14 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 14 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className={cn(
+                "inline-flex h-8 max-w-56 items-center gap-2 rounded-lg border px-2.5 text-[10px] font-medium shadow-[0_10px_24px_rgba(0,0,0,0.22)] backdrop-blur-xl",
+                statusMessages[0]?.type === "danger"
+                  ? "border-border/80 bg-surface-1/95 text-danger"
+                  : statusMessages[0]?.type === "error"
+                    ? "border-danger/18 bg-surface-1/95 text-fg-secondary"
+                    : "border-border/80 bg-surface-1/95 text-fg-secondary",
+              )}
+            >
+              {statusMessages[0]?.type === "success" ? (
+                <Check className="h-3.5 w-3.5 shrink-0 text-success" />
+              ) : (
+                <X className={cn(
+                  "h-3.5 w-3.5 shrink-0",
+                  statusMessages[0]?.type === "danger" ? "text-danger" : "text-fg-faint",
+                )} />
+              )}
+              <span className="truncate">{statusMessages[0]?.message}</span>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
