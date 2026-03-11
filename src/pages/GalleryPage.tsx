@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -13,6 +13,7 @@ import {
   Plus,
   Search,
   Settings,
+  TriangleAlert,
   X,
 } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -37,6 +38,7 @@ import { cn } from "@/lib/utils";
 interface GalleryPageProps {
   items: MediaItem[];
   openMode: OpenMode;
+  storageUnavailable: boolean;
   onRefresh: () => void;
   onOpenUpload: () => void;
   onOpenSettings: () => void;
@@ -61,6 +63,7 @@ type HubMode = "discover" | "library";
 const COLUMN_COUNT = 3;
 const ROW_GAP = 10;
 const ITEM_SIZE = 142;
+const MISSING_STORAGE_MESSAGE = "Selected storage folder is missing. Choose a new location in Settings.";
 
 function isRemoteLibraryItem(item: LibraryItem): item is RemoteLibraryItem {
   return "kind" in item && item.kind === "remote";
@@ -214,6 +217,7 @@ function DiscoverResultCard({
 export function GalleryPage({
   items,
   openMode,
+  storageUnavailable,
   onRefresh,
   onOpenUpload,
   onOpenSettings,
@@ -579,13 +583,18 @@ export function GalleryPage({
 
   const handleSelectLocal = useCallback(
     async (item: MediaItem) => {
+      if (storageUnavailable) {
+        setStatusMessages([{ type: "error", message: MISSING_STORAGE_MESSAGE }]);
+        return;
+      }
+
       try {
         await selectAndPaste(item.id, autoPaste);
       } catch (error) {
         console.error("Paste failed:", error);
       }
     },
-    [autoPaste],
+    [autoPaste, storageUnavailable],
   );
 
   const handleSelectDiscover = useCallback(
@@ -623,6 +632,11 @@ export function GalleryPage({
           return;
         }
 
+        if (storageUnavailable) {
+          setStatusMessages([{ type: "error", message: MISSING_STORAGE_MESSAGE }]);
+          return;
+        }
+
         await deleteMedia(item.id);
         onRefresh();
         setStatusMessages([{ type: "danger", message: "Removed from library." }]);
@@ -631,7 +645,7 @@ export function GalleryPage({
         setStatusMessages([{ type: "error", message: "Failed to remove item." }]);
       }
     },
-    [onRefresh],
+    [onRefresh, storageUnavailable],
   );
 
   const handleSaveDiscoverItem = useCallback(
@@ -679,6 +693,7 @@ export function GalleryPage({
 
   return (
     <div className="relative flex flex-col h-full">
+
       <div
         data-tauri-drag-region
         className="px-4 pt-4 pb-3 shrink-0 border-b border-border flex items-center gap-2"
@@ -911,9 +926,17 @@ export function GalleryPage({
           </div>
         </div>
       )}
+      {storageUnavailable && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-12 z-20 flex justify-center px-2">
+          <div className="inline-flex h-8 max-w-[calc(100%-16px)] items-center justify-center rounded-[18px] bg-surface-1 px-3 text-[10px] font-semibold text-warning shadow-[0_10px_24px_rgba(0,0,0,0.18)] [corner-shape:squircle_squircle_squircle_squircle]">
+            <TriangleAlert className="mr-2 h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Selected storage folder is missing.</span>
+          </div>
+        </div>
+      )}
       <AnimatePresence>
         {statusMessages.length > 0 && (
-          <div className="pointer-events-none absolute bottom-13 right-2 z-20 flex justify-end">
+          <div className={cn("pointer-events-none absolute right-2 z-20 flex justify-end", storageUnavailable ? "bottom-21" : "bottom-13")}>
             <motion.div
               key={`status-${statusMessages[0]?.message}`}
               initial={{ opacity: 0, x: 14 }}
@@ -971,7 +994,14 @@ export function GalleryPage({
           </button>
           <button
             onClick={onOpenUpload}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-fg-muted hover:text-fg hover:bg-surface-2 transition-all duration-150 cursor-pointer"
+            disabled={storageUnavailable}
+            className={cn(
+              "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all duration-150",
+              storageUnavailable
+                ? "text-fg-faint cursor-not-allowed opacity-50"
+                : "text-fg-muted hover:text-fg hover:bg-surface-2 cursor-pointer",
+            )}
+            title={storageUnavailable ? "Choose a valid storage folder in Settings" : undefined}
           >
             <Plus className="w-3.5 h-3.5" />
             Add

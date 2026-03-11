@@ -64,6 +64,10 @@ export async function changeStoragePath(newPath: string): Promise<string> {
   return invoke<string>("change_storage_path", { newPath });
 }
 
+
+export async function storagePathExists(): Promise<boolean> {
+  return invoke<boolean>("storage_path_exists");
+}
 export async function isSilentVideo(path: string): Promise<boolean> {
   return invoke<boolean>("is_silent_video", { path });
 }

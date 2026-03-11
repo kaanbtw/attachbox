@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { GalleryPage } from "@/pages/GalleryPage";
 import { UploadModal } from "@/pages/UploadPage";
 import { SettingsPage } from "@/pages/SettingsPage";
-import { getAllMedia } from "@/lib/tauri-api";
+import { scanMedia, storagePathExists } from "@/lib/tauri-api";
 import type { MediaItem } from "@/types";
 import { listen } from "@tauri-apps/api/event";
 
@@ -15,24 +15,55 @@ export default function App() {
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [openMode, setOpenMode] = useState<OpenMode>("tray");
   const [showUpload, setShowUpload] = useState(false);
+  const [storageAvailable, setStorageAvailable] = useState(true);
+  const previousStorageAvailableRef = useRef(true);
 
   const fetchMedia = useCallback(async () => {
     try {
-      const items = await getAllMedia();
+      const items = await scanMedia();
       setMediaItems(items);
     } catch (err) {
-      console.error("Failed to fetch media:", err);
+      console.error("Failed to scan media:", err);
+      setMediaItems([]);
     }
   }, []);
 
+  const refreshStorageAvailability = useCallback(async () => {
+    try {
+      const exists = await storagePathExists();
+      const wasAvailable = previousStorageAvailableRef.current;
+
+      previousStorageAvailableRef.current = exists;
+      setStorageAvailable(exists);
+
+      if (!exists) {
+        setMediaItems([]);
+        setShowUpload(false);
+        return;
+      }
+
+      if (!wasAvailable) {
+        await fetchMedia();
+      }
+    } catch (err) {
+      console.error("Failed to verify storage path:", err);
+      previousStorageAvailableRef.current = false;
+      setStorageAvailable(false);
+      setMediaItems([]);
+      setShowUpload(false);
+    }
+  }, [fetchMedia]);
+
   useEffect(() => {
     fetchMedia();
-  }, [fetchMedia]);
+    refreshStorageAvailability();
+  }, [fetchMedia, refreshStorageAvailability]);
 
   useEffect(() => {
     const unlisten = listen<string>("window-opened", (event) => {
       const source = event.payload as OpenMode;
       setOpenMode(source);
+      refreshStorageAvailability();
       if (source === "hotkey") {
         setCurrentView("gallery");
         setShowUpload(false);
@@ -41,16 +72,27 @@ export default function App() {
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, []);
+  }, [refreshStorageAvailability]);
 
   useEffect(() => {
-    const unlistenMedia = listen("media-changed", () => fetchMedia());
-    const unlistenStorage = listen("storage-changed", () => fetchMedia());
+    const interval = window.setInterval(() => {
+      refreshStorageAvailability();
+    }, 2000);
+
+    const unlistenMedia = listen("media-changed", () => {
+      fetchMedia();
+      refreshStorageAvailability();
+    });
+    const unlistenStorage = listen("storage-changed", () => {
+      fetchMedia();
+      refreshStorageAvailability();
+    });
     return () => {
+      window.clearInterval(interval);
       unlistenMedia.then((fn) => fn());
       unlistenStorage.then((fn) => fn());
     };
-  }, [fetchMedia]);
+  }, [fetchMedia, refreshStorageAvailability]);
 
   return (
     <div className="h-screen bg-transparent overflow-hidden rounded-[28px] [corner-shape:squircle_squircle_squircle_squircle]">
@@ -65,13 +107,20 @@ export default function App() {
             className="h-full overflow-hidden rounded-[28px] [corner-shape:squircle_squircle_squircle_squircle]"
           >
             {currentView === "settings" ? (
-              <SettingsPage onBack={() => setCurrentView("gallery")} />
+              <SettingsPage
+                storageUnavailable={!storageAvailable}
+                onBack={() => setCurrentView("gallery")}
+              />
             ) : (
               <GalleryPage
                 items={mediaItems}
                 openMode={openMode}
+                storageUnavailable={!storageAvailable}
                 onRefresh={fetchMedia}
-                onOpenUpload={() => setShowUpload(true)}
+                onOpenUpload={() => {
+                  if (!storageAvailable) return;
+                  setShowUpload(true);
+                }}
                 onOpenSettings={() => setCurrentView("settings")}
               />
             )}
@@ -83,7 +132,10 @@ export default function App() {
         isOpen={showUpload}
         onClose={() => setShowUpload(false)}
         onRefresh={fetchMedia}
-        onForceOpen={() => setShowUpload(true)}
+        onForceOpen={() => {
+          if (!storageAvailable) return;
+          setShowUpload(true);
+        }}
       />
     </div>
   );

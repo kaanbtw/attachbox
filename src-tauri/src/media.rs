@@ -30,8 +30,12 @@ pub struct MediaManager {
 
 impl MediaManager {
     pub fn new(storage_dir: PathBuf) -> Result<Self, AppError> {
-        fs::create_dir_all(&storage_dir)?;
         Ok(Self { storage_dir })
+    }
+
+    pub fn ensure_storage_dir(&self) -> Result<(), AppError> {
+        fs::create_dir_all(&self.storage_dir)?;
+        Ok(())
     }
 
     pub fn storage_path(&self) -> &Path {
@@ -119,6 +123,8 @@ impl MediaManager {
     /// Import a file into the storage folder. Preserves original filename.
     /// If a file with the same name exists, appends a suffix like " (2)".
     pub fn import_file(&self, source_path: &Path) -> Result<MediaItem, AppError> {
+        self.ensure_storage_dir()?;
+
         let extension = source_path
             .extension()
             .and_then(|e| e.to_str())

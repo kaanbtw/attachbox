@@ -233,15 +233,10 @@ pub fn run() {
             let saved_storage_path = store.get("storage_path")
                 .and_then(|v| v.as_str().map(|s| s.to_string()));
 
-            // Use saved storage path if it exists and is valid, otherwise use default
             let media_dir = if let Some(ref saved_path) = saved_storage_path {
-                let p = std::path::PathBuf::from(saved_path);
-                if p.exists() || std::fs::create_dir_all(&p).is_ok() {
-                    p
-                } else {
-                    default_media_dir
-                }
+                std::path::PathBuf::from(saved_path)
             } else {
+                let _ = std::fs::create_dir_all(&default_media_dir);
                 default_media_dir
             };
 
@@ -342,6 +337,7 @@ pub fn run() {
             update_shortcut,
             scan_media,
             change_storage_path,
+            storage_path_exists,
             is_silent_video,
         ])
         .run(tauri::generate_context!())

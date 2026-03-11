@@ -324,6 +324,12 @@ pub fn change_storage_path(
     Ok(final_path)
 }
 
+
+#[tauri::command]
+pub fn storage_path_exists(media_mgr: State<'_, ManagedMedia>) -> bool {
+    let mgr = media_mgr.lock().unwrap();
+    mgr.storage_path().is_dir()
+}
 #[tauri::command]
 pub fn is_silent_video(path: String) -> bool {
     !crate::media::has_audio_stream(std::path::Path::new(&path))

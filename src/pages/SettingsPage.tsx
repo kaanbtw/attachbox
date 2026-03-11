@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+﻿import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Keyboard,
@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   X,
   Power,
+  TriangleAlert,
 } from "lucide-react";
 import {
   getSettings,
@@ -53,15 +54,19 @@ const KEY_GROUPS = [
   },
 ];
 
-export function SettingsPage({ onBack }: { onBack: () => void }) {
+export function SettingsPage({
+  onBack,
+  storageUnavailable,
+}: {
+  onBack: () => void;
+  storageUnavailable: boolean;
+}) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [storagePath, setStoragePath] = useState("");
   const [isSaved, setIsSaved] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isChangingFolder, setIsChangingFolder] = useState(false);
-  const [pendingStoragePath, setPendingStoragePath] = useState<string | null>(
-    null,
-  );
+  const [pendingStoragePath, setPendingStoragePath] = useState<string | null>(null);
   const [launchOnStartup, setLaunchOnStartup] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const initialSettingsRef = useRef<{
@@ -97,20 +102,15 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
     );
   }, [settings, pendingStoragePath, launchOnStartup]);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(e.target as Node)
-      ) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setIsDropdownOpen(false);
       }
     };
     if (isDropdownOpen) {
       document.addEventListener("mousedown", handleClickOutside);
-      return () =>
-        document.removeEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
     }
   }, [isDropdownOpen]);
 
@@ -121,12 +121,10 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
 
       let settingsToSave = { ...settings };
 
-      // If storage path changed, migrate files first
       if (pendingStoragePath && pendingStoragePath !== storagePath) {
         const newPath = await changeStoragePath(pendingStoragePath);
         setStoragePath(newPath);
         setPendingStoragePath(null);
-        // Update the settings object with the new path before saving
         settingsToSave.storage_path = newPath;
         setSettings({ ...settings, storage_path: newPath });
       }
@@ -134,11 +132,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
       await updateSettings(settingsToSave);
       await updateShortcut(settingsToSave.shortcut_key);
 
-      // Apply autostart change
-      if (
-        initialSettingsRef.current &&
-        launchOnStartup !== initialSettingsRef.current.autostart
-      ) {
+      if (initialSettingsRef.current && launchOnStartup !== initialSettingsRef.current.autostart) {
         if (launchOnStartup) {
           await enable();
         } else {
@@ -146,7 +140,6 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
         }
       }
 
-      // Update initial ref so hasChanges resets
       initialSettingsRef.current = {
         settings: { ...settingsToSave },
         storagePath: pendingStoragePath || storagePath,
@@ -170,7 +163,6 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
         title: "Select Storage Folder",
       });
       if (!selected) return;
-      // Only set pending if it's actually different from current path
       if (selected === storagePath) return;
       setPendingStoragePath(selected as string);
     } catch (err) {
@@ -218,14 +210,24 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {/* Shortcut */}
+        {storageUnavailable && (
+          <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 px-3.5 py-3 text-warning">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="text-[11px] font-semibold">Selected storage folder is missing.</p>
+              <p className="mt-1 text-[10px] text-warning/80">
+                Choose a new storage location and save to restore local media actions.
+              </p>
+            </div>
+          </div>
+        )}
+
         <SettingSection
           icon={<Keyboard className="w-4 h-4" />}
           title="Global Shortcut"
           description="Key to summon AttachBox"
         >
           <div className="relative" ref={dropdownRef}>
-            {/* Trigger button */}
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               className={cn(
@@ -235,9 +237,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
                   : "bg-surface-3 border-border text-fg hover:border-border-hover",
               )}
             >
-              <span className="text-accent text-[11px]">
-                {settings.shortcut_key}
-              </span>
+              <span className="text-accent text-[11px]">{settings.shortcut_key}</span>
               <motion.div
                 animate={{ rotate: isDropdownOpen ? 180 : 0 }}
                 transition={{ duration: 0.2 }}
@@ -246,7 +246,6 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
               </motion.div>
             </button>
 
-            {/* Dropdown panel */}
             <AnimatePresence>
               {isDropdownOpen && (
                 <motion.div
@@ -272,10 +271,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
                               <button
                                 key={key}
                                 onClick={() => {
-                                  setSettings({
-                                    ...settings,
-                                    shortcut_key: key,
-                                  });
+                                  setSettings({ ...settings, shortcut_key: key });
                                   setIsDropdownOpen(false);
                                 }}
                                 className={cn(
@@ -285,12 +281,7 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
                                     : "text-fg-secondary hover:bg-surface-3 hover:text-fg border border-transparent",
                                 )}
                               >
-                                {isActive && (
-                                  <Check
-                                    className="w-2.5 h-2.5"
-                                    strokeWidth={3}
-                                  />
-                                )}
+                                {isActive && <Check className="w-2.5 h-2.5" strokeWidth={3} />}
                                 {key}
                               </button>
                             );
@@ -305,28 +296,34 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
           </div>
         </SettingSection>
 
-        {/* Storage path */}
-        <div className="p-4 rounded-xl bg-surface-1 border border-border space-y-2.5">
+        <div
+          className={cn(
+            "p-4 rounded-xl bg-surface-1 border space-y-2.5",
+            storageUnavailable ? "border-warning/30" : "border-border",
+          )}
+        >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-surface-3 flex items-center justify-center text-fg-muted shrink-0">
                 <FolderOpen className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-xs font-semibold text-fg">
-                  Storage Location
-                </h3>
+                <h3 className="text-xs font-semibold text-fg">Storage Location</h3>
                 <p
                   className={cn(
                     "text-[11px] mt-0.5",
                     pendingStoragePath
                       ? "text-accent font-medium"
-                      : "text-fg-muted",
+                      : storageUnavailable
+                        ? "text-warning font-medium"
+                        : "text-fg-muted",
                   )}
                 >
                   {pendingStoragePath
-                    ? "⚠ Save to apply folder change"
-                    : "Where media files are stored"}
+                    ? "Save to apply folder change"
+                    : storageUnavailable
+                      ? "Folder not found"
+                      : "Where media files are stored"}
                 </p>
               </div>
             </div>
@@ -348,14 +345,15 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
               "block px-3 py-2 rounded-lg text-[10px] font-mono border overflow-x-auto whitespace-nowrap",
               pendingStoragePath
                 ? "bg-accent/5 text-accent border-accent/25"
-                : "bg-surface-2 text-fg-muted border-border",
+                : storageUnavailable
+                  ? "bg-warning/6 text-warning border-warning/20"
+                  : "bg-surface-2 text-fg-muted border-border",
             )}
           >
             {pendingStoragePath || storagePath}
           </code>
         </div>
 
-        {/* Auto paste */}
         <SettingSection
           icon={<ClipboardPaste className="w-4 h-4" />}
           title="Auto-Paste"
@@ -381,7 +379,6 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
           </button>
         </SettingSection>
 
-        {/* Launch on Startup */}
         <SettingSection
           icon={<Power className="w-4 h-4" />}
           title="Launch on Startup"
@@ -403,7 +400,6 @@ export function SettingsPage({ onBack }: { onBack: () => void }) {
         </SettingSection>
       </div>
 
-      {/* Save */}
       <div className="px-4 py-3 border-t border-border shrink-0">
         <button
           onClick={handleSave}
@@ -453,9 +449,7 @@ function SettingSection({
         </div>
         <div className="min-w-0">
           <h3 className="text-xs font-semibold text-fg">{title}</h3>
-          <p className="text-[11px] text-fg-muted mt-0.5 leading-relaxed">
-            {description}
-          </p>
+          <p className="text-[11px] text-fg-muted mt-0.5 leading-relaxed">{description}</p>
         </div>
       </div>
       <div className="shrink-0">{children}</div>
